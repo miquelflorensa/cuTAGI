@@ -1,16 +1,16 @@
 # Diffusion Models with TAGI
 
 ### To-do
-- [] pytagi_v0 implementation
-- [] Try GPU and bath_size (Done)
+- [x] pytagi_v0 implementation
+- [x] Try GPU and bath_size
 - Metrics:
- - [] GMM? Gaussian mixture model
- - [] Point cloud matching
-- [] Homoscedastic
-- [] Heteroscedastic
-- [] Covariances sparse matrices
-- [] Motion and direction of some points during sampling
-- [] Move around mean first data cloud
+ - [ ] GMM? Gaussian mixture model
+ - [ ] Point cloud matching
+- [ ] Homoscedastic
+- [ ] Heteroscedastic
+- [ ] Covariances sparse matrices
+- [ ] Motion and direction of some points during sampling
+- [ ] Move around mean first data cloud
 
 ---
 
