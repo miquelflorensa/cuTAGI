@@ -12,7 +12,7 @@
  - [ ] GMM? Gaussian mixture model
  - [ ] Point cloud matching
 
-After building pyTAGI, run:
+After building pyTAGI, run the following command:
 ```
 pyton -m python_example.diffusion_runner
 ```
