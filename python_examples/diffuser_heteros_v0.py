@@ -26,14 +26,15 @@ class RegressionMLP(NetProp):
     def __init__(self) -> None:
         super().__init__()
         self.layers = [1, 1, 1, 1, 1, 1]
-        self.nodes = [3, 64, 64, 64, 64, 2]
+        self.nodes = [3, 64, 64, 64, 64, 4]
         self.activations = [0, 4, 4, 4, 4, 0]
         self.batch_size = 2500
         self.sigma_v = 0
         self.sigma_v_min: float = 0.0
         self.decay_factor_sigma_v: float = 0.95
-        self.cap_factor: float = 1
-        self.noise_gain = 1.0
+        #self.cap_factor: float = 1
+        self.noise_gain = 0.0
+        self.noise_type: str = "heteros"
         self.device = "cuda"
 
 class Diffuser:
@@ -108,7 +109,7 @@ class Diffuser:
                 decaying_factor=0.99,
                 curr_iter=epoch,
             )
-            V_batch = V_batch * 0.0 + sigma_v**2
+            #V_batch = V_batch * 0.0 #+ sigma_v**2
 
             for i in range(num_iter):
                 timestep = np.random.randint(0, self.diffusion_steps, self.batch_size)

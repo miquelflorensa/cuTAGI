@@ -3,8 +3,8 @@
 ### To-do
 - [x] pytagi_v0 implementation
 - [x] Try GPU and bath_size
-- [ ] Homoscedastic
-- [ ] Heteroscedastic
+- [x] Homoscedastic
+- [x] Heteroscedastic
 - [ ] Covariances sparse matrices
 - [ ] Motion and direction of some points during sampling
 - [ ] Move around mean first data cloud
@@ -20,7 +20,8 @@ pyton -m python_example.diffusion_runner
 <p align="center">
 <img src="./diffusion_swiss_roll.png" width="6000px">
 </p>
----
+
+___
 
 # Table of Contents
 * [What is cuTAGI ?](#What-is-cuTAGI)
