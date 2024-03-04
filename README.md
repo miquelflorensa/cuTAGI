@@ -3,14 +3,14 @@
 ### To-do
 - [x] pytagi_v0 implementation
 - [x] Try GPU and bath_size
-- Metrics:
- - [ ] GMM? Gaussian mixture model
- - [ ] Point cloud matching
 - [ ] Homoscedastic
 - [ ] Heteroscedastic
 - [ ] Covariances sparse matrices
 - [ ] Motion and direction of some points during sampling
 - [ ] Move around mean first data cloud
+- Metrics:
+ - [ ] GMM? Gaussian mixture model
+ - [ ] Point cloud matching
 
 ---
 
