@@ -12,6 +12,14 @@
  - [ ] GMM? Gaussian mixture model
  - [ ] Point cloud matching
 
+After building pyTAGI, run:
+```
+pyton -m python_example.diffusion_runner
+```
+
+<p align="center">
+<img src="./diffusion_swiss_roll.png" width="6000px">
+</p>
 ---
 
 # Table of Contents
@@ -24,7 +32,7 @@
 * [Citation](#citation)
 
 ## What is cuTAGI ?
-cuTAGI is an open-source Bayesian neural networks library that is based on Tractable Approximate Gaussian Inference (TAGI) theory. cuTAGI includes several of the common neural network layer architectures such as full-connected, convolutional, and transpose convolutional layers, as well as skip connections, pooling and normalization layers. cuTAGI is capable of performing different tasks such as supervised learning, unsupervised learning, and reinforcement learning. The library includes some of the advanced features such as the capacity to propagate uncertainties from the input to the output layer using the the [full covariance mode for hidden layers](https://www.jmlr.org/papers/volume22/20-1009/20-1009.pdf), the capacity to estimate the [derivative](https://www.jmlr.org/papers/volume23/21-0758/21-0758.pdf) of a neural network, and the capacity to quantify heteroscedastic aleatory uncertainty. 
+cuTAGI is an open-source Bayesian neural networks library that is based on Tractable Approximate Gaussian Inference (TAGI) theory. cuTAGI includes several of the common neural network layer architectures such as full-connected, convolutional, and transpose convolutional layers, as well as skip connections, pooling and normalization layers. cuTAGI is capable of performing different tasks such as supervised learning, unsupervised learning, and reinforcement learning. The library includes some of the advanced features such as the capacity to propagate uncertainties from the input to the output layer using the the [full covariance mode for hidden layers](https://www.jmlr.org/papers/volume22/20-1009/20-1009.pdf), the capacity to estimate the [derivative](https://www.jmlr.org/papers/volume23/21-0758/21-0758.pdf) of a neural network, and the capacity to quantify heteroscedastic aleatory uncertainty.
 
 cuTAGI is under development and new features will be added as they are ready. Currently supported tasks are:
 * Supervised learning
@@ -33,7 +41,7 @@ cuTAGI is under development and new features will be added as they are ready. Cu
   * Classification using fully-connected, convolutional and residual architectures
 * Unsupervised learning
   * Autoencoders
- 
+
 Coming soon...
 * Unsupervised learning: GANs
 * Reinforcement learning: DQN
@@ -49,12 +57,12 @@ Examples of [regression task](#regression-task) using the diagonal (top left) or
 * CMake>=3.23
 * CUDA toolkit (optional)
 
-## `pytagi` Installation 
-`pytagi` is a Python wrapper of C++/CUDA backend for TAGI method. The developers can install either  [distributed](#pypi-installation) or [local](#local-installation) versions of `pytagi`. Currently `pytagi` only supports Python version >=3.9 on both MacOS and Ubuntu. 
+## `pytagi` Installation
+`pytagi` is a Python wrapper of C++/CUDA backend for TAGI method. The developers can install either  [distributed](#pypi-installation) or [local](#local-installation) versions of `pytagi`. Currently `pytagi` only supports Python version >=3.9 on both MacOS and Ubuntu.
 
 ### Create Miniconda Environment
 We recommend installing miniconda for managing Python environment, yet `pytagi` works well with other alternatives.
-1. Install miniconda by following these [instructions](https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html#system-requirements) 
+1. Install miniconda by following these [instructions](https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html#system-requirements)
 2. Create a conda environment
     ```
     conda create --name your_env_name python=3.10
@@ -112,7 +120,7 @@ NOTE: This PyPI distributed version does not require the codebase in this reposi
       ```sh
       bash bin/build.sh
       ```
-  * CUDA build 
+  * CUDA build
       ```sh
       bash bin/build.sh -d cuda
       ```
@@ -128,7 +136,7 @@ NOTE: This PyPI distributed version does not require the codebase in this reposi
     ```sh
     sudo apt install g++
     ```
-3. Install CMake by following [these instructions](https://cmake.org/install/) 
+3. Install CMake by following [these instructions](https://cmake.org/install/)
 
 4. Build the project using CMake by the folder `cuTAGI` and  entering these lines in `Terminal`
     ```sh
@@ -143,14 +151,14 @@ NOTE: This PyPI distributed version does not require the codebase in this reposi
 
 3. Copy all extenstion files from CUDA to MS Visual Studio. See this [link](https://github.com/mitsuba-renderer/mitsuba2/issues/103#issuecomment-618378963) for further details.
     ```sh
-    COPY FROM C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v10.1\extras\visual_studio_integration\MSBuildExtensions 
+    COPY FROM C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v10.1\extras\visual_studio_integration\MSBuildExtensions
     TO        C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\MSBuild\Microsoft\VC\v160\BuildCustomizations
     ```
 4. Download and install CMake [Windows x64 Installer](https://cmake.org/download/) and add the install directory (e.g., `C:\Program Files\CMake\bin`) to PATH in [Environment variables](https://docs.microsoft.com/en-us/previous-versions/office/developer/sharepoint-2010/ee537574(v=office.14))
 
-5. Add CMake CUDA compiler to [Environment variables](https://docs.microsoft.com/en-us/previous-versions/office/developer/sharepoint-2010/ee537574(v=office.14)).  
+5. Add CMake CUDA compiler to [Environment variables](https://docs.microsoft.com/en-us/previous-versions/office/developer/sharepoint-2010/ee537574(v=office.14)).
     ```sh
-    variable = CMAKE_CUDA_COMPILER 
+    variable = CMAKE_CUDA_COMPILER
     value = C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v10.1\bin\nvcc.exe
     ```
 6. Build the project using CMake by navigating to the folder `cuTAGI` and  entering these lines in `Command Prompt`
@@ -159,7 +167,7 @@ NOTE: This PyPI distributed version does not require the codebase in this reposi
     cmake --build build --config RelWithDebInfo -j 16
     ```
 
-*NOTE: Users must enter the CUDA version installed on their machine. Here, we illustrate the installation with CUDA version v10.1 (see Step 1 for Ubuntu and 3 & 5 for Windows). 
+*NOTE: Users must enter the CUDA version installed on their machine. Here, we illustrate the installation with CUDA version v10.1 (see Step 1 for Ubuntu and 3 & 5 for Windows).
 
 ### Mac OS (CPU Version)
 1. [Install gcc and g++](https://formulae.brew.sh/formula/gcc) via `Terminal`
@@ -180,8 +188,8 @@ NOTE: This PyPI distributed version does not require the codebase in this reposi
     ```
 
 ### VS Code
-1. Install gcc and g++ w.r.t operating system such as Ubuntu, Window, and Mac OS 
-2. Install CMake 
+1. Install gcc and g++ w.r.t operating system such as Ubuntu, Window, and Mac OS
+2. Install CMake
 3. Install [the following prerequites](https://code.visualstudio.com/docs/cpp/cmake-linux)
 * Visual Studio Code
 * C++ extension for VS Code
@@ -189,7 +197,7 @@ NOTE: This PyPI distributed version does not require the codebase in this reposi
 
 ### API
 #### Classification task for MNIST
-* Two fully connected layer [`cfg/2fc.txt`](https://github.com/lhnguyen102/cuTAGI/blob/main/cfg/2fc.txt) 
+* Two fully connected layer [`cfg/2fc.txt`](https://github.com/lhnguyen102/cuTAGI/blob/main/cfg/2fc.txt)
   ```sh
   build/main cfg_mnist_2fc.txt
   ```
@@ -233,13 +241,13 @@ NOTE: This PyPI distributed version does not require the codebase in this reposi
   ```
 
 #### Docker run
-All above-mentioned tasks can be run in docker container using the following commands 
+All above-mentioned tasks can be run in docker container using the following commands
 
-* Docker with CPU build 
+* Docker with CPU build
   ```sh
   bash bin/run.sh -c cfg_mnist_2fc.txt
   ```
-* Docker with CUDA build 
+* Docker with CUDA build
   ```sh
   bash bin/run.sh -c cfg_mnist_2fc.txt -d cuda
   ```
@@ -256,7 +264,7 @@ All above-mentioned tasks can be run in docker container using the following com
 ├── src                               # Source files
 │   ├── activation_fun.cu             # Activations functions
 │   ├── activation_fun_cpu.cpp         # CPU version for activations functions
-│   ├── common.cpp                    # Common functionalities 
+│   ├── common.cpp                    # Common functionalities
 │   ├── cost.cpp                      # Performance metric
 │   ├── dataloader.cpp                # Load train and test data
 │   ├── data_transfer.cu              # Transfer data host from/to device
@@ -264,7 +272,7 @@ All above-mentioned tasks can be run in docker container using the following com
 │   ├── derivative_calcul.cu          # Derivative calculation for fully-connected layer
 │   ├── derivative_calcul_cpu.cpp     # CPU version for computing derivatives of fully-connected layer
 │   ├── feature_availability.cpp      # Feature verification
-│   ├── feed_forward.cu               # Prediction 
+│   ├── feed_forward.cu               # Prediction
 │   ├── feed_forward_cpu.cpp          # CPU version for prediction
 │   ├── global_param_update.cu        # Update network's parameters
 │   ├── global_param_update_cpu.cpp   # CPU version for updating network's parameters
@@ -289,14 +297,14 @@ All above-mentioned tasks can be run in docker container using the following com
 
 ```
 
-## License 
+## License
 
-cuTAGI is released under the MIT license. 
+cuTAGI is released under the MIT license.
 
 **THIS IS AN OPEN SOURCE SOFTWARE FOR RESEARCH PURPOSES ONLY. THIS IS NOT A PRODUCT. NO WARRANTY EXPRESSED OR IMPLIED.**
-## Related Papers 
+## Related Papers
 
-* [Tractable approximate Gaussian inference for Bayesian neural networks](https://www.jmlr.org/papers/volume22/20-1009/20-1009.pdf) (James-A. Goulet, Luong-Ha Nguyen, and Said Amiri. JMLR, 2021, 20-1009, Volume 22, Number 251, pp. 1-23.) 
+* [Tractable approximate Gaussian inference for Bayesian neural networks](https://www.jmlr.org/papers/volume22/20-1009/20-1009.pdf) (James-A. Goulet, Luong-Ha Nguyen, and Said Amiri. JMLR, 2021, 20-1009, Volume 22, Number 251, pp. 1-23.)
 * [Analytically tractable hidden-states inference in Bayesian neural networks](https://www.jmlr.org/papers/volume23/21-0758/21-0758.pdf) (Luong-Ha Nguyen and James-A. Goulet. JMLR, 2022, 21-0758, Volume 23, pp. 1-33.)
 * [Analytically tractable inference in deep neural networks](https://arxiv.org/pdf/2103.05461.pdf) (Luong-Ha Nguyen and James-A. Goulet. 2021, Arxiv:2103.05461)
 * [Analytically tractable Bayesian deep Q-Learning](https://arxiv.org/pdf/2106.11086.pdf) (Luong-Ha Nguyen and James-A. Goulet. 2021, Arxiv:2106.1108)
