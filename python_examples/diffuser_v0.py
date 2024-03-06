@@ -29,8 +29,8 @@ class RegressionMLP(NetProp):
         self.nodes = [3, 64, 64, 64, 64, 2]
         self.activations = [0, 4, 4, 4, 4, 0]
         self.batch_size = 2500
-        self.sigma_v = 0
-        self.sigma_v_min: float = 0.0
+        self.sigma_v = 1.0
+        self.sigma_v_min: float = 0.1
         self.decay_factor_sigma_v: float = 0.95
         self.cap_factor: float = 1
         self.noise_gain = 1.0
@@ -165,6 +165,7 @@ class Diffuser:
 
         # Denoising history
         xt = [x]
+        vart = [np.ones_like(x)]
 
         num_iter = int(x.shape[0] / self.batch_size)
 
@@ -178,6 +179,7 @@ class Diffuser:
             x_temp = []
             var_temp = []
 
+            associated_variance = np.zeros_like(num_iter * self.batch_size)
 
             for i in range(num_iter):
 
@@ -186,13 +188,16 @@ class Diffuser:
                 self.network.feed_forward(np.concatenate((x_batch, np.full((len(x_batch), 1), fill_value=t/40)), axis=1), Sx_batch, Sx_f_batch)
                 predicted_noise, predicted_variance = self.network.get_network_predictions()
 
-                # Forward pass with input noise and timestep
-                #self.network.forward(np.concatenate((x_batch, np.full((len(x_batch), 1), fill_value=t/40)), axis=1))
-                # Retrieve the predicted noise
-                #predicted_noise, predicted_variance = self.network.get_outputs()
+
+                # Update Variance associated with the X_t-1
+                # \Sigma_{t-1}^X = 1 / \alpha_t * \Sigma_t^X + \frac{(1-\alpha_t)^2}{\alpha_t-\alpha_t^2} * \Sigma_t^\epsilon
+                associated_variance = 1 / self.alphas[t] * associated_variance + (1 - self.alphas[t]) ** 2 / (self.alphas[t] - self.alphas[t] ** 2) * predicted_variance
+
 
                 # Denoise
-                aux = 1 / (self.alphas[t] ** 0.5) * (x_batch.flatten() - (1 - self.alphas[t]) / ((1-self.baralphas[t]) ** 0.5) * predicted_noise)
+                #epsilon = z(O)(x,t) + v, v: V ~ N(0, predicted_variance)
+                epsilon = predicted_noise + np.random.normal(0, self.sigma_v_ini**2)
+                aux = 1 / (self.alphas[t] ** 0.5) * (x_batch.flatten() - (1 - self.alphas[t]) / ((1-self.baralphas[t]) ** 0.5) * epsilon)
 
                 if t > 1:
                     variance = self.betas[t]
@@ -200,18 +205,20 @@ class Diffuser:
                     aux += std * np.random.randn(*predicted_noise.shape)
 
                 x_temp = np.concatenate((x_temp, aux))
-                var_temp = np.concatenate((var_temp, predicted_variance))
+                var_temp = np.concatenate((var_temp, associated_variance))
 
             #print("x_temp", x_temp.shape)
             #print("x", x.shape)
             # Transform x_temp to x shape
             x_temp = x_temp.reshape(x.shape)
+            var_temp = var_temp.reshape(x.shape)
 
             xt += [x_temp]
+            vart += [var_temp]
             x = x_temp
             variance = var_temp
 
-        return x, xt, variance
+        return x, xt, variance, vart
 
 
     def init_inputs(self, batch_size: int, nodes_output) -> Tuple[np.ndarray, np.ndarray]:
