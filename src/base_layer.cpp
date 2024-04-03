@@ -3,7 +3,7 @@
 // Description:  ...
 // Authors:      Luong-Ha Nguyen & James-A. Goulet
 // Created:      October 11, 2023
-// Updated:      December 30, 2023
+// Updated:      March 11, 2024
 // Contact:      luongha.nguyen@gmail.com & james.goulet@polymtl.ca
 // License:      This code is released under the MIT License.
 ////////////////////////////////////////////////////////////////////////////////
@@ -41,6 +41,16 @@ void BaseLayer::state_backward(BaseBackwardStates &next_bwd_states,
 void BaseLayer::param_backward(BaseBackwardStates &next_bwd_states,
                                BaseDeltaStates &delta_states,
                                BaseTempStates &temp_states) {}
+
+void BaseLayer::allocate_param_delta()
+/*
+ */
+{
+    this->delta_mu_w.resize(this->num_weights, 0.0f);
+    this->delta_var_w.resize(this->num_weights, 0.0f);
+    this->delta_mu_b.resize(this->num_biases, 0.0f);
+    this->delta_var_b.resize(this->num_biases, 0.0f);
+}
 
 void BaseLayer::allocate_bwd_vector(int size)
 /*
@@ -88,11 +98,14 @@ void BaseLayer::update_weights()
 
 void BaseLayer::update_biases()
 /*
+
  */
 {
-    for (int i = 0; i < this->mu_b.size(); i++) {
-        this->mu_b[i] += this->delta_mu_b[i];
-        this->var_b[i] += this->delta_var_b[i];
+    if (this->bias) {
+        for (int i = 0; i < this->mu_b.size(); i++) {
+            this->mu_b[i] += this->delta_mu_b[i];
+            this->var_b[i] += this->delta_var_b[i];
+        }
     }
 }
 
@@ -196,4 +209,19 @@ void BaseLayer::load(std::ifstream &file)
     for (auto &v_b : this->var_b) {
         file.read(reinterpret_cast<char *>(&v_b), sizeof(v_b));
     }
+}
+
+std::tuple<std::vector<float>, std::vector<float>>
+BaseLayer::get_running_mean_var()
+/*
+ */
+{
+    return {std::vector<float>(), std::vector<float>()};
+}
+
+void BaseLayer::preinit_layer()
+/* Pre-initialize the layer property e.g., number of weights & biases
+ */
+{
+    // We do nothing by default
 }

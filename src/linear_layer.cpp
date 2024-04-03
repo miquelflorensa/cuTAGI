@@ -12,80 +12,12 @@
 #include "../include/linear_layer_cuda.cuh"
 #endif
 
-Linear::Linear(size_t ip_size, size_t op_size, float gain_weight,
-               float gain_bias, std::string method)
-    : gain_w(gain_weight),
-      gain_b(gain_bias),
-      init_method(method)
-/*
- */
-{
-    this->input_size = ip_size;
-    this->output_size = op_size;
-    this->num_weights = this->input_size * this->output_size;
-    this->num_biases = this->output_size;
-
-    // Initalize weights and bias
-    if (this->device.compare("cpu") == 0) {
-        this->init_weight_bias();
-    }
-
-    // Allocate the update quantities for parameters
-    if (this->training && this->device.compare("cpu") == 0) {
-        this->bwd_states = std::make_unique<BaseBackwardStates>();
-        this->allocate_param_delta();
-    }
-}
-
-Linear::~Linear() {}
-
-std::string Linear::get_layer_info() const
-/*
- */
-{
-    return "Linear(" + std::to_string(this->input_size) + "," +
-           std::to_string(this->output_size) + ")";
-}
-
-std::string Linear::get_layer_name() const
-/*
- */
-{
-    return "Linear";
-}
-
-LayerType Linear::get_layer_type() const
-/*
- */
-{
-    return LayerType::Linear;
-}
-
-void Linear::allocate_param_delta()
-/*
- */
-{
-    this->delta_mu_w.resize(this->input_size * this->output_size, 0.0f);
-    this->delta_var_w.resize(this->input_size * this->output_size, 0.0f);
-    this->delta_mu_b.resize(this->output_size, 0.0f);
-    this->delta_var_b.resize(this->output_size, 0.0f);
-}
-
-void Linear::init_weight_bias()
-/*
- */
-{
-    std::tie(this->mu_w, this->var_w, this->mu_b, this->var_b) =
-        init_weight_bias_linear(this->init_method, this->gain_w, this->gain_b,
-                                this->input_size, this->output_size);
-}
-
-void Linear::fwd_mean_var(std::vector<float> &mu_w, std::vector<float> &var_w,
-                          std::vector<float> &mu_b, std::vector<float> &var_b,
-                          std::vector<float> &mu_a, std::vector<float> &var_a,
-                          int start_chunk, int end_chunk, size_t input_size,
-                          size_t output_size, int batch_size,
-                          std::vector<float> &mu_z, std::vector<float> &var_z)
+void linear_fwd_mean_var(std::vector<float> &mu_w, std::vector<float> &var_w,
+                         std::vector<float> &mu_b, std::vector<float> &var_b,
+                         std::vector<float> &mu_a, std::vector<float> &var_a,
+                         int start_chunk, int end_chunk, size_t input_size,
+                         size_t output_size, int batch_size, bool bias,
+                         std::vector<float> &mu_z, std::vector<float> &var_z)
 /*Compute mean of product WA for full connected layer
 
 Args:
@@ -117,17 +49,22 @@ Args:
                     var_a_tmp +
                 var_w[row * n + j] * mu_a_tmp * mu_a_tmp;
         }
-        mu_z[col * output_size + row] = sum_mu_z + mu_b[row];
-        var_z[col * output_size + row] = sum_var_z + var_b[row];
+        if (bias) {
+            mu_z[col * output_size + row] = sum_mu_z + mu_b[row];
+            var_z[col * output_size + row] = sum_var_z + var_b[row];
+        } else {
+            mu_z[col * output_size + row] = sum_mu_z;
+            var_z[col * output_size + row] = sum_var_z;
+        }
     }
 }
 
-void Linear::fwd_mean_var_mp(
-    std::vector<float> &mu_w, std::vector<float> &var_w,
-    std::vector<float> &mu_b, std::vector<float> &var_b,
-    std::vector<float> &mu_a, std::vector<float> &var_a, size_t input_size,
-    size_t output_size, int batch_size, unsigned int num_threads,
-    std::vector<float> &mu_z, std::vector<float> &var_z)
+void linear_fwd_mean_var_mp(std::vector<float> &mu_w, std::vector<float> &var_w,
+                            std::vector<float> &mu_b, std::vector<float> &var_b,
+                            std::vector<float> &mu_a, std::vector<float> &var_a,
+                            size_t input_size, size_t output_size,
+                            int batch_size, bool bias, unsigned int num_threads,
+                            std::vector<float> &mu_z, std::vector<float> &var_z)
 /*Multi-processing verion of forward pass for fc layer
  */
 {
@@ -145,11 +82,11 @@ void Linear::fwd_mean_var_mp(
         int end_chunk = start_chunk + n_per_thread + (i < extra ? 1 : 0);
 
         threads.emplace_back([=, &mu_w, &var_w, &mu_b, &var_b, &mu_a, &var_a,
-                              &input_size, &output_size, &batch_size, &mu_z,
-                              &var_z] {
-            Linear::fwd_mean_var(mu_w, var_w, mu_b, var_b, mu_a, var_a,
-                                 start_chunk, end_chunk, input_size,
-                                 output_size, batch_size, mu_z, var_z);
+                              &input_size, &output_size, &batch_size, &bias,
+                              &mu_z, &var_z] {
+            linear_fwd_mean_var(mu_w, var_w, mu_b, var_b, mu_a, var_a,
+                                start_chunk, end_chunk, input_size, output_size,
+                                batch_size, bias, mu_z, var_z);
         });
     }
 
@@ -160,10 +97,10 @@ void Linear::fwd_mean_var_mp(
     }
 }
 
-void Linear::fwd_full_cov(std::vector<float> &mu_w, std::vector<float> &var_a_f,
-                          size_t input_size, size_t output_size, int B,
-                          int start_chunk, int end_chunk,
-                          std::vector<float> &var_z_fp)
+void linear_fwd_full_cov(std::vector<float> &mu_w, std::vector<float> &var_a_f,
+                         size_t input_size, size_t output_size, int B,
+                         int start_chunk, int end_chunk,
+                         std::vector<float> &var_z_fp)
 /* Add diagonal terms to the full covariance matrix.
 
 Args:
@@ -203,11 +140,11 @@ Args:
     }
 }
 
-void Linear::fwd_full_cov_mp(std::vector<float> &mu_w,
-                             std::vector<float> &var_a_f, size_t input_size,
-                             size_t output_size, int batch_size,
-                             unsigned int num_threads,
-                             std::vector<float> &var_z_fp) {
+void linear_fwd_full_cov_mp(std::vector<float> &mu_w,
+                            std::vector<float> &var_a_f, size_t input_size,
+                            size_t output_size, int batch_size,
+                            unsigned int num_threads,
+                            std::vector<float> &var_z_fp) {
     const int tot_ops = output_size * batch_size * output_size;
 
     int start_chunk, end_chunk;
@@ -223,8 +160,8 @@ void Linear::fwd_full_cov_mp(std::vector<float> &mu_w,
 
         threads.emplace_back([=, &mu_w, &var_a_f, &input_size, &output_size,
                               &batch_size, &var_z_fp] {
-            Linear::fwd_full_cov(mu_w, var_a_f, input_size, output_size,
-                                 batch_size, start_chunk, end_chunk, var_z_fp);
+            linear_fwd_full_cov(mu_w, var_a_f, input_size, output_size,
+                                batch_size, start_chunk, end_chunk, var_z_fp);
         });
     }
 
@@ -235,14 +172,13 @@ void Linear::fwd_full_cov_mp(std::vector<float> &mu_w,
     }
 }
 
-void Linear::fwd_fc_full_var(std::vector<float> &var_w,
-                             std::vector<float> &var_b,
-                             std::vector<float> &mu_a,
-                             std::vector<float> &var_a,
-                             std::vector<float> &var_z_fp, size_t input_size,
-                             size_t output_size, int B, int start_chunk,
-                             int end_chunk, std::vector<float> &var_z,
-                             std::vector<float> &var_z_f)
+void linear_fwd_fc_full_var(std::vector<float> &var_w,
+                            std::vector<float> &var_b, std::vector<float> &mu_a,
+                            std::vector<float> &var_a,
+                            std::vector<float> &var_z_fp, size_t input_size,
+                            size_t output_size, int B, int start_chunk,
+                            int end_chunk, std::vector<float> &var_z,
+                            std::vector<float> &var_z_f)
 /**/
 {
     int col, row, i, k;
@@ -264,8 +200,7 @@ void Linear::fwd_fc_full_var(std::vector<float> &var_w,
         var_z_f[k] = final_sum;
     }
 }
-
-void Linear::fwd_fc_full_var_mp(
+void linear_fwd_fc_full_var_mp(
     std::vector<float> &var_w, std::vector<float> &var_b,
     std::vector<float> &mu_a, std::vector<float> &var_a,
     std::vector<float> &var_z_fp, int input_size, int output_size,
@@ -273,7 +208,7 @@ void Linear::fwd_fc_full_var_mp(
     std::vector<float> &var_z_f)
 /**/
 {
-    int no = this->output_size;
+    int no = output_size;
     const int tot_ops = no * batch_size;
 
     int start_chunk, end_chunk;
@@ -293,9 +228,9 @@ void Linear::fwd_fc_full_var_mp(
         threads.emplace_back([=, &var_w, &var_b, &mu_a, &var_a, &var_z_fp,
                               &input_size, &output_size, &batch_size, &var_z,
                               &var_z_f] {
-            Linear::fwd_fc_full_var(var_w, var_b, mu_a, var_a, var_z_fp,
-                                    input_size, output_size, batch_size,
-                                    start_chunk, end_chunk, var_z, var_z_f);
+            linear_fwd_fc_full_var(var_w, var_b, mu_a, var_a, var_z_fp,
+                                   input_size, output_size, batch_size,
+                                   start_chunk, end_chunk, var_z, var_z_f);
         });
     }
 
@@ -306,12 +241,12 @@ void Linear::fwd_fc_full_var_mp(
     }
 }
 
-void Linear::bwd_fc_delta_z(std::vector<float> &mu_w, std::vector<float> &jcb,
-                            std::vector<float> &delta_mu,
-                            std::vector<float> &delta_var, size_t input_size,
-                            size_t output_size, int B, int start_chunk,
-                            int end_chunk, std::vector<float> &delta_mu_z,
-                            std::vector<float> &delta_var_z)
+void linear_bwd_fc_delta_z(std::vector<float> &mu_w, std::vector<float> &jcb,
+                           std::vector<float> &delta_mu,
+                           std::vector<float> &delta_var, size_t input_size,
+                           size_t output_size, int B, int start_chunk,
+                           int end_chunk, std::vector<float> &delta_mu_z,
+                           std::vector<float> &delta_var_z)
 /*
  */
 {
@@ -336,14 +271,13 @@ void Linear::bwd_fc_delta_z(std::vector<float> &mu_w, std::vector<float> &jcb,
     }
 }
 
-void Linear::bwd_fc_delta_z_mp(std::vector<float> &mu_w,
-                               std::vector<float> &jcb,
-                               std::vector<float> &delta_mu,
-                               std::vector<float> &delta_var, size_t input_size,
-                               size_t output_size, int batch_size,
-                               unsigned int num_threads,
-                               std::vector<float> &delta_mu_z,
-                               std::vector<float> &delta_var_z)
+void linear_bwd_fc_delta_z_mp(std::vector<float> &mu_w, std::vector<float> &jcb,
+                              std::vector<float> &delta_mu,
+                              std::vector<float> &delta_var, size_t input_size,
+                              size_t output_size, int batch_size,
+                              unsigned int num_threads,
+                              std::vector<float> &delta_mu_z,
+                              std::vector<float> &delta_var_z)
 /*
  */
 {
@@ -363,9 +297,9 @@ void Linear::bwd_fc_delta_z_mp(std::vector<float> &mu_w,
         threads.emplace_back([=, &mu_w, &jcb, &delta_mu, &delta_var,
                               &input_size, &output_size, &batch_size,
                               &delta_mu_z, &delta_var_z] {
-            Linear::bwd_fc_delta_z(mu_w, jcb, delta_mu, delta_var, input_size,
-                                   output_size, batch_size, start_chunk,
-                                   end_chunk, delta_mu_z, delta_var_z);
+            linear_bwd_fc_delta_z(mu_w, jcb, delta_mu, delta_var, input_size,
+                                  output_size, batch_size, start_chunk,
+                                  end_chunk, delta_mu_z, delta_var_z);
         });
     }
 
@@ -376,12 +310,12 @@ void Linear::bwd_fc_delta_z_mp(std::vector<float> &mu_w,
     }
 }
 
-void Linear::bwd_fc_delta_w(std::vector<float> &var_w, std::vector<float> &mu_a,
-                            std::vector<float> &delta_mu,
-                            std::vector<float> &delta_var, size_t input_size,
-                            size_t output_size, int batch_size, int start_chunk,
-                            int end_chunk, std::vector<float> &delta_mu_w,
-                            std::vector<float> &delta_var_w)
+void linear_bwd_fc_delta_w(std::vector<float> &var_w, std::vector<float> &mu_a,
+                           std::vector<float> &delta_mu,
+                           std::vector<float> &delta_var, size_t input_size,
+                           size_t output_size, int batch_size, int start_chunk,
+                           int end_chunk, std::vector<float> &delta_mu_w,
+                           std::vector<float> &delta_var_w)
 /* Compute update quantities for the mean of weights for full-connected layer.
 
 Args:
@@ -414,14 +348,14 @@ Args:
     }
 }
 
-void Linear::bwd_fc_delta_w_mp(std::vector<float> &var_w,
-                               std::vector<float> &mu_a,
-                               std::vector<float> &delta_mu,
-                               std::vector<float> &delta_var, size_t input_size,
-                               size_t output_size, int batch_size,
-                               unsigned int num_threads,
-                               std::vector<float> &delta_mu_w,
-                               std::vector<float> &delta_var_w)
+void linear_bwd_fc_delta_w_mp(std::vector<float> &var_w,
+                              std::vector<float> &mu_a,
+                              std::vector<float> &delta_mu,
+                              std::vector<float> &delta_var, size_t input_size,
+                              size_t output_size, int batch_size,
+                              unsigned int num_threads,
+                              std::vector<float> &delta_mu_w,
+                              std::vector<float> &delta_var_w)
 /**/
 {
     const int tot_ops = input_size * output_size;
@@ -440,9 +374,9 @@ void Linear::bwd_fc_delta_w_mp(std::vector<float> &var_w,
         threads.emplace_back([=, &var_w, &mu_a, &delta_mu, &delta_var,
                               &input_size, &output_size, &batch_size,
                               &delta_mu_w, &delta_var_w] {
-            Linear::bwd_fc_delta_w(var_w, mu_a, delta_mu, delta_var, input_size,
-                                   output_size, batch_size, start_chunk,
-                                   end_chunk, delta_mu_w, delta_var_w);
+            linear_bwd_fc_delta_w(var_w, mu_a, delta_mu, delta_var, input_size,
+                                  output_size, batch_size, start_chunk,
+                                  end_chunk, delta_mu_w, delta_var_w);
         });
     }
 
@@ -453,12 +387,12 @@ void Linear::bwd_fc_delta_w_mp(std::vector<float> &var_w,
     }
 }
 
-void Linear::bwd_fc_delta_b(std::vector<float> &var_b,
-                            std::vector<float> &delta_mu,
-                            std::vector<float> &delta_var, size_t output_size,
-                            int batch_size, int start_chunk, int end_chunk,
-                            std::vector<float> &delta_mu_b,
-                            std::vector<float> &delta_var_b)
+void linear_bwd_fc_delta_b(std::vector<float> &var_b,
+                           std::vector<float> &delta_mu,
+                           std::vector<float> &delta_var, size_t output_size,
+                           int batch_size, int start_chunk, int end_chunk,
+                           std::vector<float> &delta_mu_b,
+                           std::vector<float> &delta_var_b)
 /* Compute update quantities for the variance of biases for full-connected
 layer.
 
@@ -488,13 +422,12 @@ Args:
     }
 }
 
-void Linear::bwd_fc_delta_b_mp(std::vector<float> &var_b,
-                               std::vector<float> &delta_mu,
-                               std::vector<float> &delta_var,
-                               size_t output_size, int batch_size,
-                               unsigned int num_threads,
-                               std::vector<float> &delta_mu_b,
-                               std::vector<float> &delta_var_b)
+void linear_bwd_fc_delta_b_mp(std::vector<float> &var_b,
+                              std::vector<float> &delta_mu,
+                              std::vector<float> &delta_var, size_t output_size,
+                              int batch_size, unsigned int num_threads,
+                              std::vector<float> &delta_mu_b,
+                              std::vector<float> &delta_var_b)
 /*
  */
 {
@@ -511,9 +444,9 @@ void Linear::bwd_fc_delta_b_mp(std::vector<float> &var_b,
 
         threads.emplace_back([=, &var_b, &delta_mu, &delta_var, &output_size,
                               &batch_size, &delta_mu_b, &delta_var_b] {
-            Linear::bwd_fc_delta_b(var_b, delta_mu, delta_var, output_size,
-                                   batch_size, start_chunk, end_chunk,
-                                   delta_mu_b, delta_var_b);
+            linear_bwd_fc_delta_b(var_b, delta_mu, delta_var, output_size,
+                                  batch_size, start_chunk, end_chunk,
+                                  delta_mu_b, delta_var_b);
         });
     }
 
@@ -522,6 +455,66 @@ void Linear::bwd_fc_delta_b_mp(std::vector<float> &var_b,
             thread.join();
         }
     }
+}
+
+Linear::Linear(size_t ip_size, size_t op_size, bool bias, float gain_weight,
+               float gain_bias, std::string method)
+    : gain_w(gain_weight),
+      gain_b(gain_bias),
+      init_method(method)
+/*
+ */
+{
+    this->input_size = ip_size;
+    this->output_size = op_size;
+    this->bias = bias;
+    this->num_weights = this->input_size * this->output_size;
+    this->num_biases = this->output_size;
+
+    // Initalize weights and bias
+    if (this->device.compare("cpu") == 0) {
+        this->init_weight_bias();
+    }
+
+    // Allocate the update quantities for parameters
+    if (this->training && this->device.compare("cpu") == 0) {
+        this->bwd_states = std::make_unique<BaseBackwardStates>();
+        this->allocate_param_delta();
+    }
+}
+
+Linear::~Linear() {}
+
+std::string Linear::get_layer_info() const
+/*
+ */
+{
+    return "Linear(" + std::to_string(this->input_size) + "," +
+           std::to_string(this->output_size) + ")";
+}
+
+std::string Linear::get_layer_name() const
+/*
+ */
+{
+    return "Linear";
+}
+
+LayerType Linear::get_layer_type() const
+/*
+ */
+{
+    return LayerType::Linear;
+}
+
+void Linear::init_weight_bias()
+/*
+ */
+{
+    std::tie(this->mu_w, this->var_w, this->mu_b, this->var_b) =
+        init_weight_bias_linear(this->init_method, this->gain_w, this->gain_b,
+                                this->input_size, this->output_size,
+                                this->num_weights, this->num_biases);
 }
 
 void Linear::forward(BaseHiddenStates &input_states,
@@ -535,37 +528,29 @@ void Linear::forward(BaseHiddenStates &input_states,
 
     // Forward pass
     if (this->num_threads > 1) {
-        this->fwd_mean_var_mp(
-            this->mu_w, this->var_w, this->mu_b, this->var_b, input_states.mu_a,
-            input_states.var_a, this->input_size, this->output_size, batch_size,
-            this->num_threads, output_states.mu_a, output_states.var_a);
+        linear_fwd_mean_var_mp(this->mu_w, this->var_w, this->mu_b, this->var_b,
+                               input_states.mu_a, input_states.var_a,
+                               this->input_size, this->output_size, batch_size,
+                               this->bias, this->num_threads,
+                               output_states.mu_a, output_states.var_a);
     } else {
         int start_chunk = 0;
         int end_chunk = this->output_size * batch_size;
-        this->fwd_mean_var(this->mu_w, this->var_w, this->mu_b, this->var_b,
-                           input_states.mu_a, input_states.var_a, start_chunk,
-                           end_chunk, this->input_size, this->output_size,
-                           batch_size, output_states.mu_a, output_states.var_a);
+        linear_fwd_mean_var(this->mu_w, this->var_w, this->mu_b, this->var_b,
+                            input_states.mu_a, input_states.var_a, start_chunk,
+                            end_chunk, this->input_size, this->output_size,
+                            batch_size, this->bias, output_states.mu_a,
+                            output_states.var_a);
     }
     // Update number of actual states.
+    output_states.width = this->out_width;
+    output_states.height = this->out_height;
+    output_states.depth = this->out_channels;
     output_states.block_size = batch_size;
     output_states.actual_size = this->output_size;
 
-    // TODO: Group the following if statements
-    // Save activation mean and jacobian from the previous layer for the
-    // backward pass
-    if (this->bwd_states->mu_a.size() == 0 && this->training) {
-        int act_size = input_states.actual_size * input_states.block_size;
-        this->allocate_bwd_vector(act_size);
-    }
     if (this->training) {
-        // Activation's jacobian and mean from the previous layer
-        this->fill_bwd_vector(input_states);
-
-        // Send a copy of activation's mean and variance to the output buffer
-        // for the current layer.
-        // TODO: consider to have only mu_a and var_a in struct HiddenStates
-        this->fill_output_states(output_states);
+        this->storing_states_for_training(input_states, output_states);
     }
 }
 
@@ -581,7 +566,7 @@ void Linear::state_backward(BaseBackwardStates &next_bwd_states,
 
     // Compute inovation vector
     if (this->num_threads > 1) {
-        this->bwd_fc_delta_z_mp(
+        linear_bwd_fc_delta_z_mp(
             this->mu_w, next_bwd_states.jcb, input_delta_states.delta_mu,
             input_delta_states.delta_var, this->input_size, this->output_size,
             batch_size, this->num_threads, output_delta_states.delta_mu,
@@ -589,7 +574,7 @@ void Linear::state_backward(BaseBackwardStates &next_bwd_states,
     } else {
         int start_chunk = 0;
         int end_chunk = batch_size * this->input_size;
-        this->bwd_fc_delta_z(
+        linear_bwd_fc_delta_z(
             this->mu_w, next_bwd_states.jcb, input_delta_states.delta_mu,
             input_delta_states.delta_var, this->input_size, this->output_size,
             batch_size, start_chunk, end_chunk, output_delta_states.delta_mu,
@@ -612,35 +597,39 @@ Args:
 
     // Update values for weights & biases
     if (this->num_threads > 1) {
-        this->bwd_fc_delta_w_mp(
+        linear_bwd_fc_delta_w_mp(
             this->var_w, next_bwd_states.mu_a, delta_states.delta_mu,
             delta_states.delta_var, this->input_size, this->output_size,
             batch_size, this->num_threads, this->delta_mu_w, this->delta_var_w);
 
-        this->bwd_fc_delta_b_mp(this->var_b, delta_states.delta_mu,
-                                delta_states.delta_var, this->output_size,
-                                batch_size, this->num_threads, this->delta_mu_b,
-                                this->delta_var_b);
+        if (this->bias) {
+            linear_bwd_fc_delta_b_mp(this->var_b, delta_states.delta_mu,
+                                     delta_states.delta_var, this->output_size,
+                                     batch_size, this->num_threads,
+                                     this->delta_mu_b, this->delta_var_b);
+        }
     } else {
         int start_chunk = 0;
         int end_chunk = this->input_size * this->output_size;
-        this->bwd_fc_delta_w(this->var_w, next_bwd_states.mu_a,
-                             delta_states.delta_mu, delta_states.delta_var,
-                             this->input_size, this->output_size, batch_size,
-                             start_chunk, end_chunk, this->delta_mu_w,
-                             this->delta_var_w);
+        linear_bwd_fc_delta_w(this->var_w, next_bwd_states.mu_a,
+                              delta_states.delta_mu, delta_states.delta_var,
+                              this->input_size, this->output_size, batch_size,
+                              start_chunk, end_chunk, this->delta_mu_w,
+                              this->delta_var_w);
 
-        this->bwd_fc_delta_b(this->var_b, delta_states.delta_mu,
-                             delta_states.delta_var, this->output_size,
-                             batch_size, start_chunk, this->output_size,
-                             this->delta_mu_b, this->delta_var_b);
+        if (this->bias) {
+            linear_bwd_fc_delta_b(this->var_b, delta_states.delta_mu,
+                                  delta_states.delta_var, this->output_size,
+                                  batch_size, start_chunk, this->output_size,
+                                  this->delta_mu_b, this->delta_var_b);
+        }
     }
 }
 #ifdef USE_CUDA
 std::unique_ptr<BaseLayer> Linear::to_cuda() {
     this->device = "cuda";
     return std::make_unique<LinearCuda>(this->input_size, this->output_size,
-                                        this->gain_w, this->gain_b,
+                                        this->bias, this->gain_w, this->gain_b,
                                         this->init_method);
 }
 #endif

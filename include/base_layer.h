@@ -3,7 +3,7 @@
 // Description:  ...
 // Authors:      Luong-Ha Nguyen & James-A. Goulet
 // Created:      October 09, 2023
-// Updated:      January 19, 2024
+// Updated:      March 28, 2024
 // Contact:      luongha.nguyen@gmail.com & james.goulet@polymtl.ca
 // License:      This code is released under the MIT License.
 ////////////////////////////////////////////////////////////////////////////////
@@ -16,7 +16,16 @@
 
 #include "data_struct.h"
 
-enum class LayerType { Base, Linear, Conv2d, Pool2d, LSTM, Activation };
+enum class LayerType {
+    Base,
+    Linear,
+    Conv2d,
+    ConvTranspose2d,
+    Pool2d,
+    LSTM,
+    Activation,
+    Norm
+};
 
 class InitArgs {
    public:
@@ -24,7 +33,8 @@ class InitArgs {
     size_t height = 0;
     size_t depth = 0;
     int batch_size = 1;
-    InitArgs(size_t width, size_t height, size_t depth = 1, int batch_size = 1);
+    InitArgs(size_t width = 0, size_t height = 0, size_t depth = 0,
+             int batch_size = 1);
     virtual ~InitArgs() = default;
 };
 
@@ -70,9 +80,9 @@ class BaseLayer {
 
     virtual LayerType get_layer_type() const;
 
-    int get_input_size();
+    virtual int get_input_size();
 
-    int get_output_size();
+    virtual int get_output_size();
 
     virtual void forward(BaseHiddenStates &input_states,
                          BaseHiddenStates &output_states,
@@ -86,6 +96,8 @@ class BaseLayer {
     virtual void param_backward(BaseBackwardStates &next_bwd_states,
                                 BaseDeltaStates &delta_states,
                                 BaseTempStates &temp_states);
+
+    virtual void allocate_param_delta();
 
     virtual void update_weights();
 
@@ -103,6 +115,12 @@ class BaseLayer {
                                  " at line: " + std::to_string(__LINE__) +
                                  ". Cuda device is not available");
     };
+
+    // DEBUG
+    virtual std::tuple<std::vector<float>, std::vector<float>>
+    get_running_mean_var();
+
+    virtual void preinit_layer();
 
    protected:
     void allocate_bwd_vector(int size);

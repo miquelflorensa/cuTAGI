@@ -3,7 +3,7 @@
 // Description:  ...
 // Authors:      Luong-Ha Nguyen & James-A. Goulet
 // Created:      October 09, 2023
-// Updated:      December 24, 2023
+// Updated:      March 22, 2024
 // Contact:      luongha.nguyen@gmail.com & james.goulet@polymtl.ca
 // License:      This code is released under the MIT License.
 ////////////////////////////////////////////////////////////////////////////////
@@ -15,6 +15,91 @@
 #include "base_layer.h"
 #include "common.h"
 #include "data_struct.h"
+
+void relu_mean_var(std::vector<float> const &mu_z,
+                   std::vector<float> const &var_z, int start_chunk,
+                   int end_chunk, std::vector<float> &mu_a,
+                   std::vector<float> &jcb, std::vector<float> &var_a);
+
+void relu_mean_var_mp(std::vector<float> const &mu_z,
+                      std::vector<float> const &var_z, int n,
+                      unsigned int num_threads, std::vector<float> &mu_a,
+                      std::vector<float> &jcb, std::vector<float> &var_a);
+
+void sigmoid_mean_var(std::vector<float> &mu_z, std::vector<float> &var_z,
+                      int start_chunk, int end_chunk, std::vector<float> &mu_a,
+                      std::vector<float> &jcb, std::vector<float> &var_a);
+
+void sigmoid_mean_var_mp(std::vector<float> &mu_z, std::vector<float> &var_z,
+                         int n, unsigned int num_threads,
+                         std::vector<float> &mu_a, std::vector<float> &jcb,
+                         std::vector<float> &var_a);
+
+void tanh_mean_var(std::vector<float> &mu_z, std::vector<float> &var_z,
+                   int start_chunk, int end_chunk, std::vector<float> &mu_a,
+                   std::vector<float> &jcb, std::vector<float> &var_a);
+
+void tanh_mean_var_mp(std::vector<float> &mu_z, std::vector<float> &var_z,
+                      int n, unsigned int num_threads, std::vector<float> &mu_a,
+                      std::vector<float> &jcb, std::vector<float> &var_a);
+
+void mixture_relu_mean_var(std::vector<float> &mu_z, std::vector<float> &var_z,
+                           float omega_tol, int start_chunk, int end_chunk,
+                           std::vector<float> &mu_a, std::vector<float> &jcb,
+                           std::vector<float> &var_a);
+
+void mixture_relu_mean_var_mp(std::vector<float> &mu_z,
+                              std::vector<float> &var_z, float omega_tol, int n,
+                              unsigned int num_threads,
+                              std::vector<float> &mu_a, std::vector<float> &jcb,
+                              std::vector<float> &var_a);
+
+void mixture_sigmoid_mean_var(std::vector<float> &mu_z,
+                              std::vector<float> &var_z, float omega_tol,
+                              int start_chunk, int end_chunk,
+                              std::vector<float> &mu_a, std::vector<float> &jcb,
+                              std::vector<float> &var_a);
+
+void mixture_sigmoid_mean_var_mp(std::vector<float> &mu_z,
+                                 std::vector<float> &var_z, float omega_tol,
+                                 int n, unsigned int num_threads,
+                                 std::vector<float> &mu_a,
+                                 std::vector<float> &jcb,
+                                 std::vector<float> &var_a);
+
+void mixture_tanh_mean_var(std::vector<float> &mu_z, std::vector<float> &var_z,
+                           float omega_tol, int start_chunk, int end_chunk,
+                           std::vector<float> &mu_a, std::vector<float> &jcb,
+                           std::vector<float> &var_a);
+
+void mixture_tanh_mean_var_mp(std::vector<float> &mu_z,
+                              std::vector<float> &var_z, float omega_tol, int n,
+                              unsigned int num_threads,
+                              std::vector<float> &mu_a, std::vector<float> &jcb,
+                              std::vector<float> &var_a);
+
+void softplus_mean_var(std::vector<float> &mu_z, std::vector<float> &var_z,
+                       int start_chunk, int end_chunk, std::vector<float> &mu_a,
+                       std::vector<float> &jcb, std::vector<float> &var_a);
+
+void softplus_mean_var_mp(std::vector<float> &mu_z, std::vector<float> &var_z,
+                          int n, unsigned int num_threads,
+                          std::vector<float> &mu_a, std::vector<float> &jcb,
+                          std::vector<float> &var_a);
+
+void leaky_relu_mean_var(std::vector<float> &mu_z, std::vector<float> &var_z,
+                         float alpha, int start_chunk, int end_chunk,
+                         std::vector<float> &mu_a, std::vector<float> &jcb,
+                         std::vector<float> &var_a);
+
+void leaky_relu_mean_var_mp(std::vector<float> &mu_z, std::vector<float> &var_z,
+                            float alpha, int n, unsigned int num_threads,
+                            std::vector<float> &mu_a, std::vector<float> &jcb,
+                            std::vector<float> &var_a);
+
+void softmax_mean_var(std::vector<float> &mu_z, std::vector<float> &var_z,
+                      int no, int batch_size, std::vector<float> &mu_a,
+                      std::vector<float> &jcb, std::vector<float> &var_a);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// ReLU
@@ -38,25 +123,14 @@ class ReLU : public BaseLayer {
 
     LayerType get_layer_type() const override;
 
-    static void relu_mean_var(std::vector<float> const &mu_z,
-                              std::vector<float> const &var_z, int start_chunk,
-                              int end_chunk, std::vector<float> &mu_a,
-                              std::vector<float> &jcb,
-                              std::vector<float> &var_a);
-
-    static void relu_mean_var_mp(std::vector<float> const &mu_z,
-                                 std::vector<float> const &var_z, int n,
-                                 unsigned int num_threads,
-                                 std::vector<float> &mu_a,
-                                 std::vector<float> &jcb,
-                                 std::vector<float> &var_a);
-
     void forward(BaseHiddenStates &input_states,
                  BaseHiddenStates &output_states,
                  BaseTempStates &temp_states) override;
 
     using BaseLayer::param_backward;
     using BaseLayer::state_backward;
+
+    void allocate_param_delta() override{};
 
     void update_weights() override{};
 
@@ -94,25 +168,14 @@ class Sigmoid : public BaseLayer {
 
     LayerType get_layer_type() const override;
 
-    static void sigmoid_mean_var(std::vector<float> &mu_z,
-                                 std::vector<float> &var_z, int start_chunk,
-                                 int end_chunk, std::vector<float> &mu_a,
-                                 std::vector<float> &jcb,
-                                 std::vector<float> &var_a);
-
-    static void sigmoid_mean_var_mp(std::vector<float> &mu_z,
-                                    std::vector<float> &var_z, int n,
-                                    unsigned int num_threads,
-                                    std::vector<float> &mu_a,
-                                    std::vector<float> &jcb,
-                                    std::vector<float> &var_a);
-
     void forward(BaseHiddenStates &input_states,
                  BaseHiddenStates &output_states,
                  BaseTempStates &temp_states) override;
 
     using BaseLayer::param_backward;
     using BaseLayer::state_backward;
+
+    void allocate_param_delta() override{};
 
     void update_weights() override{};
 
@@ -150,20 +213,11 @@ class Tanh : public BaseLayer {
 
     LayerType get_layer_type() const override;
 
-    static void tanh_mean_var(std::vector<float> &mu_z,
-                              std::vector<float> &var_z, int start_chunk,
-                              int end_chunk, std::vector<float> &mu_a,
-                              std::vector<float> &jcb,
-                              std::vector<float> &var_a);
-
-    void tanh_mean_var_mp(std::vector<float> &mu_z, std::vector<float> &var_z,
-                          int n, unsigned int num_threads,
-                          std::vector<float> &mu_a, std::vector<float> &jcb,
-                          std::vector<float> &var_a);
-
     void forward(BaseHiddenStates &input_states,
                  BaseHiddenStates &output_states,
                  BaseTempStates &temp_states) override;
+
+    void allocate_param_delta() override{};
 
     using BaseLayer::param_backward;
     using BaseLayer::state_backward;
@@ -205,23 +259,14 @@ class MixtureRelu : public BaseLayer {
 
     LayerType get_layer_type() const override;
 
-    static void mixture_relu_mean_var(std::vector<float> &mu_z,
-                                      std::vector<float> &var_z,
-                                      float omega_tol, int start_chunk,
-                                      int end_chunk, std::vector<float> &mu_a,
-                                      std::vector<float> &jcb,
-                                      std::vector<float> &var_a);
-    static void mixture_relu_mean_var_mp(
-        std::vector<float> &mu_z, std::vector<float> &var_z, float omega_tol,
-        int n, unsigned int num_threads, std::vector<float> &mu_a,
-        std::vector<float> &jcb, std::vector<float> &var_a);
-
     void forward(BaseHiddenStates &input_states,
                  BaseHiddenStates &output_states,
                  BaseTempStates &temp_states) override;
 
     using BaseLayer::param_backward;
     using BaseLayer::state_backward;
+
+    void allocate_param_delta() override{};
 
     void update_weights() override{};
 
@@ -260,22 +305,14 @@ class MixtureSigmoid : public BaseLayer {
 
     LayerType get_layer_type() const override;
 
-    static void mixture_sigmoid_mean_var(
-        std::vector<float> &mu_z, std::vector<float> &var_z, float omega_tol,
-        int start_chunk, int end_chunk, std::vector<float> &mu_a,
-        std::vector<float> &jcb, std::vector<float> &var_a);
-
-    static void mixture_sigmoid_mean_var_mp(
-        std::vector<float> &mu_z, std::vector<float> &var_z, float omega_tol,
-        int n, unsigned int num_threads, std::vector<float> &mu_a,
-        std::vector<float> &jcb, std::vector<float> &var_a);
-
     void forward(BaseHiddenStates &input_states,
                  BaseHiddenStates &output_states,
                  BaseTempStates &temp_states) override;
 
     using BaseLayer::param_backward;
     using BaseLayer::state_backward;
+
+    void allocate_param_delta() override{};
 
     void update_weights() override{};
 
@@ -314,24 +351,14 @@ class MixtureTanh : public BaseLayer {
 
     LayerType get_layer_type() const override;
 
-    static void mixture_tanh_mean_var(std::vector<float> &mu_z,
-                                      std::vector<float> &var_z,
-                                      float omega_tol, int start_chunk,
-                                      int end_chunk, std::vector<float> &mu_a,
-                                      std::vector<float> &jcb,
-                                      std::vector<float> &var_a);
-
-    static void mixture_tanh_mean_var_mp(
-        std::vector<float> &mu_z, std::vector<float> &var_z, float omega_tol,
-        int n, unsigned int num_threads, std::vector<float> &mu_a,
-        std::vector<float> &jcb, std::vector<float> &var_a);
-
     void forward(BaseHiddenStates &input_states,
                  BaseHiddenStates &output_states,
                  BaseTempStates &temp_states) override;
 
     using BaseLayer::param_backward;
     using BaseLayer::state_backward;
+
+    void allocate_param_delta() override{};
 
     void update_weights() override{};
 
@@ -369,25 +396,14 @@ class Softplus : public BaseLayer {
 
     LayerType get_layer_type() const override;
 
-    static void softplus_mean_var(std::vector<float> &mu_z,
-                                  std::vector<float> &var_z, int start_chunk,
-                                  int end_chunk, std::vector<float> &mu_a,
-                                  std::vector<float> &jcb,
-                                  std::vector<float> &var_a);
-
-    static void softplus_mean_var_mp(std::vector<float> &mu_z,
-                                     std::vector<float> &var_z, int n,
-                                     unsigned int num_threads,
-                                     std::vector<float> &mu_a,
-                                     std::vector<float> &jcb,
-                                     std::vector<float> &var_a);
-
     void forward(BaseHiddenStates &input_states,
                  BaseHiddenStates &output_states,
                  BaseTempStates &temp_states) override;
 
     using BaseLayer::param_backward;
     using BaseLayer::state_backward;
+
+    void allocate_param_delta() override{};
 
     void update_weights() override{};
 
@@ -426,26 +442,14 @@ class LeakyRelu : public BaseLayer {
 
     LayerType get_layer_type() const override;
 
-    static void leaky_relu_mean_var(std::vector<float> &mu_z,
-                                    std::vector<float> &var_z, float alpha,
-                                    int start_chunk, int end_chunk,
-                                    std::vector<float> &mu_a,
-                                    std::vector<float> &jcb,
-                                    std::vector<float> &var_a);
-
-    static void leaky_relu_mean_var_mp(std::vector<float> &mu_z,
-                                       std::vector<float> &var_z, float alpha,
-                                       int n, unsigned int num_threads,
-                                       std::vector<float> &mu_a,
-                                       std::vector<float> &jcb,
-                                       std::vector<float> &var_a);
-
     void forward(BaseHiddenStates &input_states,
                  BaseHiddenStates &output_states,
                  BaseTempStates &temp_states) override;
 
     using BaseLayer::param_backward;
     using BaseLayer::state_backward;
+
+    void allocate_param_delta() override{};
 
     void update_weights() override{};
 
@@ -484,18 +488,14 @@ class Softmax : public BaseLayer {
 
     LayerType get_layer_type() const override;
 
-    static void softmax_mean_var(std::vector<float> &mu_z,
-                                 std::vector<float> &var_z, int no,
-                                 int batch_size, std::vector<float> &mu_a,
-                                 std::vector<float> &jcb,
-                                 std::vector<float> &var_a);
-
     void forward(BaseHiddenStates &input_states,
                  BaseHiddenStates &output_states,
                  BaseTempStates &temp_states) override;
 
     using BaseLayer::param_backward;
     using BaseLayer::state_backward;
+
+    void allocate_param_delta() override{};
 
     void update_weights() override{};
 
@@ -551,6 +551,8 @@ class RemaxA : public BaseLayer {
 
     using BaseLayer::param_backward;
     using BaseLayer::state_backward;
+
+    void allocate_param_delta() override{};
 
     void update_weights() override{};
 

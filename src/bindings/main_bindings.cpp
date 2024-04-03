@@ -4,7 +4,7 @@
 // Description:  ...
 // Authors:      Luong-Ha Nguyen & James-A. Goulet
 // Created:      December 30, 2023
-// Updated:      December 31, 2023
+// Updated:      March 31, 2024
 // Contact:      luongha.nguyen@gmail.com & james.goulet@polymtl.ca
 // License:      This code is released under the MIT License.
 ////////////////////////////////////////////////////////////////////////////////
@@ -30,7 +30,12 @@ PYBIND11_MODULE(cutagitest, modo) {
     bind_softmax(modo);
     bind_linear_layer(modo);
     bind_conv2d_layer(modo);
+    bind_convtranspose2d_layer(modo);
     bind_avgpool2d_layer(modo);
+    bind_layernorm_layer(modo);
+    bind_batchnorm_layer(modo);
+    bind_lstm_layer(modo);
     bind_sequential(modo);
     bind_output_updater(modo);
+    bind_utils(modo);
 }

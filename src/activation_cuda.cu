@@ -3,7 +3,7 @@
 // Description:  ...
 // Authors:      Luong-Ha Nguyen & James-A. Goulet
 // Created:      December 04, 2023
-// Updated:      January 03, 2024
+// Updated:      April 02, 2024
 // Contact:      luongha.nguyen@gmail.com & james.goulet@polymtl.ca
 // License:      This code is released under the MIT License.
 ////////////////////////////////////////////////////////////////////////////////
@@ -55,7 +55,14 @@ void ReLUCuda::forward(BaseHiddenStates &input_states,
     unsigned int blocks =
         (num_states + this->num_cuda_threads - 1) / this->num_cuda_threads;
 
-    relu_mean_var<<<blocks, this->num_cuda_threads>>>(
+    // Assign output dimensions
+    cu_output_states->height = cu_input_states->height;
+    cu_output_states->depth = cu_input_states->depth;
+    cu_output_states->block_size = cu_input_states->block_size;
+    cu_output_states->block_size = cu_input_states->block_size;
+    cu_output_states->actual_size = cu_input_states->actual_size;
+
+    relu_mean_var_cuda<<<blocks, this->num_cuda_threads>>>(
         cu_input_states->d_mu_a, cu_input_states->d_var_a, num_states,
         cu_output_states->d_mu_a, cu_output_states->d_jcb,
         cu_output_states->d_var_a);
@@ -64,10 +71,6 @@ void ReLUCuda::forward(BaseHiddenStates &input_states,
         this->input_size = input_states.actual_size;
         this->output_size = input_states.actual_size;
     }
-
-    // Update number of actual states.
-    cu_output_states->block_size = cu_input_states->block_size;
-    cu_output_states->actual_size = cu_input_states->actual_size;
 }
 
 std::unique_ptr<BaseLayer> ReLUCuda::to_host()
@@ -126,7 +129,7 @@ void SigmoidCuda::forward(BaseHiddenStates &input_states,
     unsigned int blocks =
         (num_states + this->num_cuda_threads - 1) / this->num_cuda_threads;
 
-    sigmoid_mean_var<<<blocks, this->num_cuda_threads>>>(
+    sigmoid_mean_var_cuda<<<blocks, this->num_cuda_threads>>>(
         cu_input_states->d_mu_a, cu_input_states->d_var_a, num_states,
         cu_output_states->d_mu_a, cu_output_states->d_jcb,
         cu_output_states->d_var_a);
@@ -193,13 +196,11 @@ void TanhCuda::forward(BaseHiddenStates &input_states,
     // TempStateCuda *cu_temp_states = dynamic_cast<TempStateCuda
     // *>(&temp_states);
 
-    cu_input_states->to_device();
-
     int num_states = input_states.actual_size * input_states.block_size;
     unsigned int blocks =
         (num_states + this->num_cuda_threads - 1) / this->num_cuda_threads;
 
-    tanh_mean_var<<<blocks, this->num_cuda_threads>>>(
+    tanh_mean_var_cuda<<<blocks, this->num_cuda_threads>>>(
         cu_input_states->d_mu_a, cu_input_states->d_var_a, num_states,
         cu_output_states->d_mu_a, cu_output_states->d_jcb,
         cu_output_states->d_var_a);
@@ -266,13 +267,11 @@ void MixtureReluCuda::forward(BaseHiddenStates &input_states,
     // TempStateCuda *cu_temp_states = dynamic_cast<TempStateCuda
     // *>(&temp_states);
 
-    cu_input_states->to_device();
-
     int num_states = input_states.actual_size * input_states.block_size;
     unsigned int blocks =
         (num_states + this->num_cuda_threads - 1) / this->num_cuda_threads;
 
-    mixture_relu<<<blocks, this->num_cuda_threads>>>(
+    mixture_relu_mean_var_cuda<<<blocks, this->num_cuda_threads>>>(
         cu_input_states->d_mu_a, cu_input_states->d_var_a, this->omega_tol,
         num_states, cu_output_states->d_mu_a, cu_output_states->d_jcb,
         cu_output_states->d_var_a);
@@ -339,13 +338,11 @@ void MixtureSigmoidCuda::forward(BaseHiddenStates &input_states,
     // TempStateCuda *cu_temp_states = dynamic_cast<TempStateCuda
     // *>(&temp_states);
 
-    cu_input_states->to_device();
-
     int num_states = input_states.actual_size * input_states.block_size;
     unsigned int blocks =
         (num_states + this->num_cuda_threads - 1) / this->num_cuda_threads;
 
-    mixture_sigmoid<<<blocks, this->num_cuda_threads>>>(
+    mixture_sigmoid_mean_var_cuda<<<blocks, this->num_cuda_threads>>>(
         cu_input_states->d_mu_a, cu_input_states->d_var_a, this->omega_tol,
         num_states, cu_output_states->d_mu_a, cu_output_states->d_jcb,
         cu_output_states->d_var_a);
@@ -412,13 +409,11 @@ void MixtureTanhCuda::forward(BaseHiddenStates &input_states,
     // TempStateCuda *cu_temp_states = dynamic_cast<TempStateCuda
     // *>(&temp_states);
 
-    cu_input_states->to_device();
-
     int num_states = input_states.actual_size * input_states.block_size;
     unsigned int blocks =
         (num_states + this->num_cuda_threads - 1) / this->num_cuda_threads;
 
-    mixture_tanh<<<blocks, this->num_cuda_threads>>>(
+    mixture_tanh_mean_var_cuda<<<blocks, this->num_cuda_threads>>>(
         cu_input_states->d_mu_a, cu_input_states->d_var_a, this->omega_tol,
         num_states, cu_output_states->d_mu_a, cu_output_states->d_jcb,
         cu_output_states->d_var_a);
@@ -485,13 +480,11 @@ void SoftplusCuda::forward(BaseHiddenStates &input_states,
     // TempStateCuda *cu_temp_states = dynamic_cast<TempStateCuda
     // *>(&temp_states);
 
-    cu_input_states->to_device();
-
     int num_states = input_states.actual_size * input_states.block_size;
     unsigned int blocks =
         (num_states + this->num_cuda_threads - 1) / this->num_cuda_threads;
 
-    softplus<<<blocks, this->num_cuda_threads>>>(
+    softplus_mean_var_cuda<<<blocks, this->num_cuda_threads>>>(
         cu_input_states->d_mu_a, cu_input_states->d_var_a, num_states,
         cu_output_states->d_mu_a, cu_output_states->d_jcb,
         cu_output_states->d_var_a);
@@ -564,7 +557,7 @@ void LeakyReluCuda::forward(BaseHiddenStates &input_states,
     unsigned int blocks =
         (num_states + this->num_cuda_threads - 1) / this->num_cuda_threads;
 
-    leakyrelu<<<blocks, this->num_cuda_threads>>>(
+    leakyrelu_mean_var_cuda<<<blocks, this->num_cuda_threads>>>(
         cu_input_states->d_mu_a, cu_input_states->d_var_a, this->alpha,
         num_states, cu_output_states->d_mu_a, cu_output_states->d_jcb,
         cu_output_states->d_var_a);
@@ -631,13 +624,11 @@ void SoftmaxCuda::forward(BaseHiddenStates &input_states,
     // TempStateCuda *cu_temp_states = dynamic_cast<TempStateCuda
     // *>(&temp_states);
 
-    cu_input_states->to_device();
-
     unsigned int blocks =
         (input_states.block_size + this->num_cuda_threads - 1) /
         this->num_cuda_threads;
 
-    softmax<<<blocks, this->num_cuda_threads>>>(
+    softmax_mean_var_cuda<<<blocks, this->num_cuda_threads>>>(
         cu_input_states->d_mu_a, cu_input_states->d_var_a,
         cu_input_states->actual_size, cu_input_states->block_size,
         cu_output_states->d_mu_a, cu_output_states->d_jcb,
@@ -668,9 +659,9 @@ std::unique_ptr<BaseLayer> SoftmaxCuda::to_host()
 // CUDA kernels
 ////////////////////////////////////////////////////////////////////////////////
 
-__global__ void relu_mean_var(float const *mu_z, float const *var_z,
-                              int num_states, float *mu_a, float *jcb,
-                              float *var_a)
+__global__ void relu_mean_var_cuda(float const *mu_z, float const *var_z,
+                                   int num_states, float *mu_a, float *jcb,
+                                   float *var_a)
 /*
  */
 {
@@ -691,9 +682,9 @@ __global__ void relu_mean_var(float const *mu_z, float const *var_z,
     }
 }
 
-__global__ void sigmoid_mean_var(float const *mu_z, float const *var_z,
-                                 int num_states, float *mu_a, float *jcb,
-                                 float *var_a)
+__global__ void sigmoid_mean_var_cuda(float const *mu_z, float const *var_z,
+                                      int num_states, float *mu_a, float *jcb,
+                                      float *var_a)
 /*
  */
 {
@@ -708,9 +699,9 @@ __global__ void sigmoid_mean_var(float const *mu_z, float const *var_z,
     }
 }
 
-__global__ void tanh_mean_var(float const *mu_z, float const *var_z,
-                              int num_states, float *mu_a, float *jcb,
-                              float *var_a)
+__global__ void tanh_mean_var_cuda(float const *mu_z, float const *var_z,
+                                   int num_states, float *mu_a, float *jcb,
+                                   float *var_a)
 /*
  */
 {
@@ -724,9 +715,10 @@ __global__ void tanh_mean_var(float const *mu_z, float const *var_z,
     }
 }
 
-__global__ void mixture_relu(float const *mu_z, float const *var_z,
-                             float omega_tol, int num_states, float *mu_a,
-                             float *jcb, float *var_a)
+__global__ void mixture_relu_mean_var_cuda(float const *mu_z,
+                                           float const *var_z, float omega_tol,
+                                           int num_states, float *mu_a,
+                                           float *jcb, float *var_a)
 /*
  */
 {
@@ -767,9 +759,59 @@ __global__ void mixture_relu(float const *mu_z, float const *var_z,
     }
 }
 
-__global__ void mixture_sigmoid(float const *mu_z, float const *var_z,
-                                float omega_tol, int num_states, float *mu_a,
-                                float *jcb, float *var_a)
+__global__ void mixture_sigmoid_mean_var_cuda(float const *mu_z,
+                                              float const *var_z,
+                                              float omega_tol, int num_states,
+                                              float *mu_a, float *jcb,
+                                              float *var_a)
+/*
+ */
+{
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+    float alpha_lower, alpha_upper, omega, beta, kappa, mu_z_til, var_z_til,
+        cdf_lower, cdf_upper, pdf_lower, pdf_upper;
+    float pi = 3.141592;  // pi number
+
+    if (col < num_states) {
+        // cdf and pdf for truncated normal distribution
+        alpha_lower = (-1.0f - mu_z[col]) / powf(var_z[col], 0.5);
+        alpha_upper = (1.0f - mu_z[col]) / powf(var_z[col], 0.5);
+        cdf_lower = normcdff(alpha_lower);
+        cdf_upper = normcdff(alpha_upper);
+        pdf_lower =
+            (1.0f / powf(2.0f * pi, 0.5)) * expf(-powf(alpha_lower, 2) / 2.0f);
+        pdf_upper =
+            (1.0f / powf(2.0f * pi, 0.5)) * expf(-powf(alpha_upper, 2) / 2.0f);
+
+        // Truncated distribution's parameters
+        omega = max(cdf_upper - cdf_lower, omega_tol);
+        beta = (pdf_upper - pdf_lower) / omega;
+        kappa = 1 -
+                (pdf_upper * alpha_upper - pdf_lower * alpha_lower) / omega -
+                powf(beta, 2);
+
+        // Gaussian mixture's paramters
+        mu_z_til = mu_z[col] - beta * powf(var_z[col], 0.5);
+        var_z_til = kappa * var_z[col];
+
+        // Activation distribution
+        mu_a[col] =
+            (omega * mu_z_til - cdf_lower + (1 - cdf_upper)) / 2.0f + 0.5f;
+
+        var_a[col] =
+            (omega * var_z_til + omega * powf(mu_z_til - mu_a[col], 2) +
+             cdf_lower * powf(1 + mu_a[col], 2) +
+             (1 - cdf_upper) * powf(1 - mu_a[col], 2)) /
+            4.0f;
+
+        jcb[col] = omega * 0.5;
+    }
+}
+
+__global__ void mixture_tanh_mean_var_cuda(float const *mu_z,
+                                           float const *var_z, float omega_tol,
+                                           int num_states, float *mu_a,
+                                           float *jcb, float *var_a)
 /*
  */
 {
@@ -802,59 +844,16 @@ __global__ void mixture_sigmoid(float const *mu_z, float const *var_z,
 
         // Activation distribution
         mu_a[col] = omega * mu_z_til - cdf_lower + (1 - cdf_upper);
-
         var_a[col] = omega * var_z_til + omega * powf(mu_z_til - mu_a[col], 2) +
                      cdf_lower * powf(1 + mu_a[col], 2) +
                      (1 - cdf_upper) * powf(1 - mu_a[col], 2);
-
-        jcb[col] = powf(omega * kappa, 0.5);
+        jcb[col] = omega;
     }
 }
 
-__global__ void mixture_tanh(float const *mu_z, float const *var_z,
-                             float omega_tol, int num_states, float *mu_a,
-                             float *jcb, float *var_a)
-/*
- */
-{
-    int col = blockIdx.x * blockDim.x + threadIdx.x;
-    float alpha_lower, alpha_upper, omega, beta, kappa, mu_z_til, var_z_til,
-        cdf_lower, cdf_upper, pdf_lower, pdf_upper;
-    float pi = 3.141592;  // pi number
-
-    if (col < num_states) {
-        // cdf and pdf for truncated normal distribution
-        alpha_lower = (-1.0f - mu_z[col]) / powf(var_z[col], 0.5);
-        alpha_upper = (1.0f - mu_z[col]) / powf(var_z[col], 0.5);
-        cdf_lower = normcdff(alpha_lower);
-        cdf_upper = normcdff(alpha_upper);
-        pdf_lower =
-            (1.0f / powf(2.0f * pi, 0.5)) * expf(-powf(alpha_lower, 2) / 2.0f);
-        pdf_upper =
-            (1.0f / powf(2.0f * pi, 0.5)) * expf(-powf(alpha_upper, 2) / 2.0f);
-
-        // Truncated distribution's parameters
-        omega = max(cdf_upper - cdf_lower, omega_tol);
-        beta = (pdf_upper - pdf_lower) / omega;
-        kappa = 1 -
-                (pdf_upper * alpha_upper - pdf_lower * alpha_lower) / omega -
-                powf(beta, 2);
-
-        // Gaussian mixture's paramters
-        mu_z_til = mu_z[col] - beta * powf(var_z[col], 0.5);
-        var_z_til = kappa * var_z[col];
-
-        // Activation distribution
-        mu_a[col] = omega * mu_z_til - cdf_lower + (1 - cdf_upper);
-        var_a[col] = omega * var_z_til + omega * powf(mu_z_til - mu_a[col], 2) +
-                     cdf_lower * powf(1 + mu_a[col], 2) +
-                     (1 - cdf_upper) * powf(1 - mu_a[col], 2);
-        jcb[col] = powf(omega * kappa, 0.5);
-    }
-}
-
-__global__ void softplus(float const *mu_z, float const *var_z, int num_states,
-                         float *mu_a, float *jcb, float *var_a)
+__global__ void softplus_mean_var_cuda(float const *mu_z, float const *var_z,
+                                       int num_states, float *mu_a, float *jcb,
+                                       float *var_a)
 /*
  */
 {
@@ -868,8 +867,9 @@ __global__ void softplus(float const *mu_z, float const *var_z, int num_states,
     }
 }
 
-__global__ void leakyrelu(float const *mu_z, float const *var_z, float alpha,
-                          int num_states, float *mu_a, float *jcb, float *var_a)
+__global__ void leakyrelu_mean_var_cuda(float const *mu_z, float const *var_z,
+                                        float alpha, int num_states,
+                                        float *mu_a, float *jcb, float *var_a)
 /*
  */
 {
@@ -892,8 +892,9 @@ __global__ void leakyrelu(float const *mu_z, float const *var_z, float alpha,
     }
 }
 
-__global__ void softmax(float const *mu_z, float *var_z, size_t output_size,
-                        int batch_size, float *mu_a, float *jcb, float *var_a)
+__global__ void softmax_mean_var_cuda(float const *mu_z, float *var_z,
+                                      size_t output_size, int batch_size,
+                                      float *mu_a, float *jcb, float *var_a)
 /*
  */
 {

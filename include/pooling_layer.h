@@ -3,7 +3,7 @@
 // Description:  ...
 // Authors:      Luong-Ha Nguyen & James-A. Goulet
 // Created:      January 08, 2024
-// Updated:      January 14, 2024
+// Updated:      March 11, 2024
 // Contact:      luongha.nguyen@gmail.com & james.goulet@polymtl.ca
 // License:      This code is released under the MIT License.
 ////////////////////////////////////////////////////////////////////////////////
@@ -64,6 +64,8 @@ class AvgPool2d : public BaseLayer {
                         BaseDeltaStates &delta_states,
                         BaseTempStates &temp_states) override;
 
+    void allocate_param_delta() override{};
+
     void update_weights() override{};
 
     void update_biases() override{};
@@ -74,6 +76,9 @@ class AvgPool2d : public BaseLayer {
 #ifdef USE_CUDA
     std::unique_ptr<BaseLayer> to_cuda() override;
 #endif
+
+    void preinit_layer() override;
+
    protected:
     void lazy_index_init();
 };

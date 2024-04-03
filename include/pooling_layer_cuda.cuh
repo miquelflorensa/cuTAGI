@@ -57,9 +57,13 @@ class AvgPool2dCuda : public BaseLayerCuda {
                         BaseDeltaStates &delta_states,
                         BaseTempStates &temp_states) override;
 
+    void allocate_param_delta() override{};
+
     void update_weights() override{};
 
     void update_biases() override{};
+
+    void preinit_layer() override;
 
    protected:
     void lazy_index_init();

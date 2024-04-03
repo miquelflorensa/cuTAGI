@@ -3,7 +3,7 @@
 // Description:  ...
 // Authors:      Luong-Ha Nguyen & James-A. Goulet
 // Created:      October 09, 2023
-// Updated:      January 23, 2024
+// Updated:      March 18, 2024
 // Contact:      luongha.nguyen@gmail.com & james.goulet@polymtl.ca
 // License:      This code is released under the MIT License.
 ////////////////////////////////////////////////////////////////////////////////
@@ -12,6 +12,10 @@
 
 #include "../include/conv2d_layer.h"
 #include "../include/pooling_layer.h"
+#ifdef USE_CUDA
+#include "../include/base_layer_cuda.cuh"
+#endif
+#include <memory>
 
 Sequential::Sequential() {}
 Sequential::~Sequential() {}
@@ -166,7 +170,7 @@ void Sequential::forward(const std::vector<float> &mu_x,
  */
 {
     // Batch size
-    int batch_size = mu_x.size() / this->layers.front()->input_size;
+    int batch_size = mu_x.size() / this->layers.front()->get_input_size();
 
     // Only initialize if batch size changes
     if (batch_size != this->z_buffer_block_size) {
@@ -192,6 +196,39 @@ void Sequential::forward(const std::vector<float> &mu_x,
         std::swap(this->input_z_buffer, this->output_z_buffer);
     }
 
+    // Output buffer is considered as the final output of network
+    std::swap(this->output_z_buffer, this->input_z_buffer);
+}
+
+void Sequential::forward(BaseHiddenStates &input_states)
+/*
+ */
+{
+    // Batch size
+    int batch_size = input_states.block_size;
+
+    // Only initialize if batch size changes
+    if (batch_size != this->z_buffer_block_size) {
+        this->z_buffer_block_size = batch_size;
+        this->z_buffer_size = batch_size * this->z_buffer_size;
+
+        init_output_state_buffer();
+        if (this->training) {
+            init_delta_state_buffer();
+        }
+    }
+    auto *first_layer = this->layers[0].get();
+    first_layer->forward(input_states, *this->input_z_buffer,
+                         *this->temp_states);
+
+    for (int i = 1; i < this->layers.size(); i++) {
+        auto *current_layer = this->layers[i].get();
+
+        current_layer->forward(*this->input_z_buffer, *this->output_z_buffer,
+                               *this->temp_states);
+
+        std::swap(this->input_z_buffer, this->output_z_buffer);
+    }
     // Output buffer is considered as the final output of network
     std::swap(this->output_z_buffer, this->input_z_buffer);
 }
@@ -231,7 +268,7 @@ void Sequential::backward()
     }
 
     // State update for input layer
-    if (this->input_hidden_state_update) {
+    if (this->input_state_update) {
         this->layers[0]->state_backward(
             *this->layers[0]->bwd_states, *this->input_delta_z_buffer,
             *this->output_delta_z_buffer, *this->temp_states);
@@ -283,6 +320,14 @@ std::string Sequential::get_layer_stack_info() const {
     return ss.str();
 }
 
+void Sequential::preinit_layer() {
+    for (const auto &layer : this->layers) {
+        if (layer) {
+            layer->preinit_layer();
+        }
+    }
+}
+
 void Sequential::save(const std::string &filename)
 /**/
 {
@@ -306,6 +351,10 @@ void Sequential::save(const std::string &filename)
 void Sequential::load(const std::string &filename)
 /**/
 {
+    // Precalculate layer's properties e.g., number of parameres to load the
+    // saved model
+    this->preinit_layer();
+
     std::ifstream file(filename, std::ios::binary);
     if (!file.is_open()) {
         throw std::runtime_error("Error in file: " + std::string(__FILE__) +
@@ -358,10 +407,10 @@ This allows saving network's parameters in csv so that
     }
 
     // Save parameters to csv
-    std::string mu_w_path = filename + "_mu_w.csv";
-    std::string var_w_path = filename + "_var_w.csv";
-    std::string mu_b_path = filename + "_mu_b.csv";
-    std::string var_b_path = filename + "_var_b.csv";
+    std::string mu_w_path = filename + "_1_mw.csv";
+    std::string var_w_path = filename + "_2_Sw.csv";
+    std::string mu_b_path = filename + "_3_mb.csv";
+    std::string var_b_path = filename + "_4_Sb.csv";
 
     write_csv(mu_w_path, mu_w);
     write_csv(var_w_path, var_w);
@@ -387,10 +436,10 @@ void Sequential::load_csv(const std::string &filename)
     std::vector<float> var_b(num_biases);
 
     // Read data from csv
-    std::string mu_w_path = filename + "_mu_w.csv";
-    std::string var_w_path = filename + "_var_w.csv";
-    std::string mu_b_path = filename + "_mu_b.csv";
-    std::string var_b_path = filename + "_var_b.csv";
+    std::string mu_w_path = filename + "_1_mw.csv";
+    std::string var_w_path = filename + "_2_Sw.csv";
+    std::string mu_b_path = filename + "_3_mb.csv";
+    std::string var_b_path = filename + "_4_Sb.csv";
 
     read_csv(mu_w_path, mu_w, 1, false);
     read_csv(var_w_path, var_w, 1, false);

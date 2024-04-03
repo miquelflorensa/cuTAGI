@@ -3,7 +3,7 @@
 // Description:  API for c++
 // Authors:      Luong-Ha Nguyen & James-A. Goulet
 // Created:      January 23, 2022
-// Updated:      November 01, 2023
+// Updated:      March 27, 2024
 // Contact:      luongha.nguyen@gmail.com & james.goulet@polymtl.ca
 // License:      This code is released under the MIT License.
 ///////////////////////////////////////////////////////////////////////////////
@@ -14,7 +14,11 @@
 #include "include/struct_var.h"
 #include "include/task_cpu.h"
 #include "include/user_input.h"
+#include "test/autoencoder/test_autoencoder_v2.h"
+#include "test/cross_val/cross_val.h"
 #include "test/fnn/test_fnn_cpu_v2.h"
+#include "test/fnn/test_fnn_mnist_cpu.h"
+#include "test/lstm/test_lstm_v2.h"
 #include "test/mha/test_mha_cpu.h"
 #include "test/test_cpu.h"
 #include "test/test_lstm_cpu.h"
@@ -58,6 +62,14 @@ int main(int argc, char *argv[]) {
         auto is_passed = test_mha();
     } else if (user_input_file.compare("test_fc_v2") == 0) {
         auto is_passed = test_fnn_cpu_v2();
+    } else if (user_input_file.compare("test_fc_mnist") == 0) {
+        auto is_passed = test_fnn_mnist();
+    } else if (user_input_file.compare("cross_val_mnist") == 0) {
+        auto is_passed = cross_val_with_old_version();
+    } else if (user_input_file.compare("autoencoder_mnist") == 0) {
+        auto is_passed = test_autoecoder_v2();
+    } else if (user_input_file.compare("lstm_toy") == 0) {
+        auto is_passed = test_lstm_v2();
     } else {
         task_command_cpu(user_input, path);
     }

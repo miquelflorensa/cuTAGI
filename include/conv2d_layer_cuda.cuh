@@ -3,7 +3,7 @@
 // Description:  ...
 // Authors:      Luong-Ha Nguyen & James-A. Goulet
 // Created:      January 04, 2024
-// Updated:      January 19, 2024
+// Updated:      March 11, 2024
 // Contact:      luongha.nguyen@gmail.com & james.goulet@polymtl.ca
 // License:      This code is released under the MIT License.
 ////////////////////////////////////////////////////////////////////////////////
@@ -14,14 +14,6 @@
 
 class Conv2dCuda : public BaseLayerCuda {
    public:
-    int *d_idx_mwa_2;
-    int *d_idx_cov_zwa_1;
-    int *d_idx_var_z_ud;
-    std::vector<int> idx_mwa_2;
-    std::vector<int> idx_cov_zwa_1;
-    std::vector<int> idx_var_z_ud;
-    int row_zw = 0, col_z_ud = 0;
-
     float gain_w;
     float gain_b;
     std::string init_method;
@@ -30,11 +22,19 @@ class Conv2dCuda : public BaseLayerCuda {
     int stride = 1;
     int padding_type = 1;
 
+    int *d_idx_mwa_2;
+    int *d_idx_cov_zwa_1;
+    int *d_idx_var_z_ud;
+    std::vector<int> idx_mwa_2;
+    std::vector<int> idx_cov_zwa_1;
+    std::vector<int> idx_var_z_ud;
+    int row_zw = 0, col_z_ud = 0;
+
     Conv2dCuda(size_t in_channels, size_t out_channels, size_t kernel_size,
-               int stride = 1, int padding = 0, int padding_type = 0,
-               size_t in_width = 0, size_t in_height = 0, float gain_w = 1.0f,
-               float gain_b = 1.0f, std::string init_method = "He",
-               bool bias = true);
+               bool bias = true, int stride = 1, int padding = 0,
+               int padding_type = 0, size_t in_width = 0, size_t in_height = 0,
+               float gain_w = 1.0f, float gain_b = 1.0f,
+               std::string init_method = "He");
 
     virtual ~Conv2dCuda();
 
@@ -55,7 +55,7 @@ class Conv2dCuda : public BaseLayerCuda {
 
     void compute_input_output_size(const InitArgs &args) override;
 
-    void get_number_param_conv2d();
+    void get_number_param();
 
     void init_weight_bias();
 
@@ -74,8 +74,9 @@ class Conv2dCuda : public BaseLayerCuda {
 
     std::unique_ptr<BaseLayer> to_host() override;
 
+    void preinit_layer() override;
+
    protected:
-    void allocate_param_delta();
     void allocate_conv_index();
     void conv_index_to_device();
     void lazy_index_init();

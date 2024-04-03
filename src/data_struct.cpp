@@ -3,7 +3,7 @@
 // Description:  ...
 // Authors:      Luong-Ha Nguyen & James-A. Goulet
 // Created:      December 10, 2023
-// Updated:      January 03, 2024
+// Updated:      March 18, 2024
 // Contact:      luongha.nguyen@gmail.com & james.goulet@polymtl.ca
 // License:      This code is released under the MIT License.
 ////////////////////////////////////////////////////////////////////////////////
@@ -38,6 +38,24 @@ BaseDeltaStates::BaseDeltaStates(size_t n, size_t m)
 
 BaseDeltaStates::BaseDeltaStates() {}
 
+void BaseDeltaStates::reset_zeros() {
+    std::fill(this->delta_mu.begin(), this->delta_mu.end(), 0);
+    std::fill(this->delta_var.begin(), this->delta_var.end(), 0);
+}
+
+void BaseDeltaStates::copy_from(const BaseDeltaStates &source, int num_data)
+/*
+ */
+{
+    if (num_data == -1) {
+        num_data = this->size;
+    }
+    for (int i = 0; i < num_data; i++) {
+        this->delta_mu[i] = source.delta_mu[i];
+        this->delta_var[i] = source.delta_var[i];
+    }
+}
+
 BaseTempStates::BaseTempStates(size_t n, size_t m)
     : tmp_1(n, 0.0f), tmp_2(n, 0.0f), size(n), block_size(m) {}
 
@@ -59,4 +77,53 @@ void BaseObservation::set_obs(std::vector<float> &mu_obs,
 
 void BaseObservation::set_selected_idx(std::vector<int> &selected_idx) {
     this->selected_idx = selected_idx;
+}
+
+BaseLSTMStates::BaseLSTMStates() {}
+BaseLSTMStates::BaseLSTMStates(size_t num_states, size_t num_inputs)
+    : num_states(num_states),
+      num_inputs(num_inputs)
+/*
+ */
+{
+    this->reset_zeros();
+}
+
+void BaseLSTMStates::set_num_states(size_t num_states, size_t num_inputs)
+/*
+ */
+{
+    this->num_states = num_states;
+    this->num_inputs = num_inputs;
+    this->reset_zeros();
+}
+
+void BaseLSTMStates::reset_zeros()
+/**/
+{
+    mu_ha.resize(num_states + num_inputs, 0);
+    var_ha.resize(num_states + num_inputs, 0);
+    mu_f_ga.resize(num_states, 0);
+    var_f_ga.resize(num_states, 0);
+    jcb_f_ga.resize(num_states, 0);
+    mu_i_ga.resize(num_states, 0);
+    var_i_ga.resize(num_states, 0);
+    jcb_i_ga.resize(num_states, 0);
+    mu_c_ga.resize(num_states, 0);
+    var_c_ga.resize(num_states, 0);
+    jcb_c_ga.resize(num_states, 0);
+    mu_o_ga.resize(num_states, 0);
+    var_o_ga.resize(num_states, 0);
+    jcb_o_ga.resize(num_states, 0);
+    mu_ca.resize(num_states, 0);
+    var_ca.resize(num_states, 0);
+    jcb_ca.resize(num_states, 0);
+    mu_c.resize(num_states, 0);
+    var_c.resize(num_states, 0);
+    mu_c_prev.resize(num_states, 0);
+    var_c_prev.resize(num_states, 0);
+    mu_h_prev.resize(num_states, 0);
+    var_h_prev.resize(num_states, 0);
+    cov_i_c.resize(num_states, 0);
+    cov_o_tanh_c.resize(num_states, 0);
 }
