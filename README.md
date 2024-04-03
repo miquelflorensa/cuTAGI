@@ -16,6 +16,10 @@ After building pyTAGI, run the following command:
 ```
 pyton -m python_example.diffusion_runner
 ```
+Or:
+```
+pyton -m python_example.diffusion_runner_heteros
+```
 
 <p align="center">
 <img src="./diffusion_swiss_roll.png" width="6000px">
