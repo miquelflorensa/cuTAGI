@@ -19,6 +19,8 @@ from pytagi import NetProp, TagiNetwork
 from pytagi import Normalizer as normalizer
 from pytagi import Utils, exponential_scheduler
 
+from .fid_score import calculate_fid
+
 
 class RegressionMLP(NetProp):
     """Multi-layer perceptron for regression task"""
@@ -28,12 +30,12 @@ class RegressionMLP(NetProp):
         self.layers = [1, 1, 1, 1, 1, 1]
         self.nodes = [3, 64, 64, 64, 64, 4]
         self.activations = [0, 4, 4, 4, 4, 0]
-        self.batch_size = 2500
+        self.batch_size = 10
         self.sigma_v = 0
         self.sigma_v_min: float = 0.0
         self.decay_factor_sigma_v: float = 0.95
         #self.cap_factor: float = 1
-        self.noise_gain = 0.0
+        self.noise_gain = 0.1
         self.noise_type: str = "heteros"
         self.device = "cuda"
 
@@ -67,6 +69,9 @@ class Diffuser:
 
         self.baralphas = self.schedule / self.schedule[0]
 
+        self.num_samples = self.sampling_dim[0] + self.batch_size - self.sampling_dim[0] % self.batch_size
+        self.val_set = np.random.randn(self.num_samples, self.sampling_dim[1])
+
     def normalize(self, X: np.ndarray) -> np.ndarray:
         """Normalize the data"""
         X = (X - X.mean()) / X.std()
@@ -97,7 +102,8 @@ class Diffuser:
             self.nodes_output
         )
 
-        var_error = []
+        mse_epochs = []
+        fid_epochs = []
 
         for epoch in pbar:
             sum_likelihood = 0
@@ -131,8 +137,9 @@ class Diffuser:
 
 
                 ma_pred, Sa_pred = self.network.get_network_predictions()
+                #ma, va = self.network.get_network_outputs()
                 #print("ma_pred", len(ma_pred))
-                #print("Sa_pred", len(Sa_pred))
+                #print("Sa_pred", va)
                 #print("eps_batch", len(eps_batch.flatten()))
 
                 # Compute MSE
@@ -153,19 +160,28 @@ class Diffuser:
             pbar.set_description(f"MSE: {mse:.4f}")
             #pbar.set_description(f"Loglikelihood: {sum_likelihood:.4f}")
 
-            var_error.append(np.var(mse_accumulated))
+            mse += [mse]
 
-        return var_error
+            # FID accuracy on validation set
+            x, xt, variance, vart = self.sample()
+            act1 = x
+            act2 = self.X_data[:x.shape[0], :]
+            fid = calculate_fid(act1, act2)
+            #print(f"FID: {fid:.4f}")
+            fid_epochs += [fid]
+
+        return mse_epochs, fid_epochs
 
 
     def sample(self) -> None:
         """Sampling with TAGI"""
 
         # Generate noisy data
-        x = np.random.randn(self.sampling_dim[0], self.sampling_dim[1])
+        x = self.val_set
 
         # Denoising history
         xt = [x]
+        vart = [np.ones_like(x)]
 
         num_iter = int(x.shape[0] / self.batch_size)
 
@@ -179,6 +195,7 @@ class Diffuser:
             x_temp = []
             var_temp = []
 
+            associated_variance = np.zeros_like(num_iter * self.batch_size)
 
             for i in range(num_iter):
 
@@ -187,13 +204,17 @@ class Diffuser:
                 self.network.feed_forward(np.concatenate((x_batch, np.full((len(x_batch), 1), fill_value=t/40)), axis=1), Sx_batch, Sx_f_batch)
                 predicted_noise, predicted_variance = self.network.get_network_predictions()
 
-                # Forward pass with input noise and timestep
-                #self.network.forward(np.concatenate((x_batch, np.full((len(x_batch), 1), fill_value=t/40)), axis=1))
-                # Retrieve the predicted noise
-                #predicted_noise, predicted_variance = self.network.get_outputs()
+
+                # Update Variance associated with the X_t-1
+                # \Sigma_{t-1}^X = 1 / \alpha_t * \Sigma_t^X + \frac{(1-\alpha_t)^2}{\alpha_t-\alpha_t^2} * \Sigma_t^\epsilon
+                associated_variance = 1 / self.alphas[t] * associated_variance + (1 - self.alphas[t]) ** 2 / (self.alphas[t] - self.alphas[t] ** 2) * predicted_variance
+                # Clip the variance
+                associated_variance = np.clip(associated_variance, 0, 10)
 
                 # Denoise
-                aux = 1 / (self.alphas[t] ** 0.5) * (x_batch.flatten() - (1 - self.alphas[t]) / ((1-self.baralphas[t]) ** 0.5) * predicted_noise)
+                #epsilon = z(O)(x,t) + v, v: V ~ N(0, predicted_variance)
+                epsilon = predicted_noise + np.random.normal(0, self.sigma_v_ini**2)
+                aux = 1 / (self.alphas[t] ** 0.5) * (x_batch.flatten() - (1 - self.alphas[t]) / ((1-self.baralphas[t]) ** 0.5) * epsilon)
 
                 if t > 1:
                     variance = self.betas[t]
@@ -201,18 +222,18 @@ class Diffuser:
                     aux += std * np.random.randn(*predicted_noise.shape)
 
                 x_temp = np.concatenate((x_temp, aux))
-                var_temp = np.concatenate((var_temp, predicted_variance))
+                var_temp = np.concatenate((var_temp, associated_variance))
 
-            #print("x_temp", x_temp.shape)
-            #print("x", x.shape)
             # Transform x_temp to x shape
             x_temp = x_temp.reshape(x.shape)
+            var_temp = var_temp.reshape(x.shape)
 
             xt += [x_temp]
+            vart += [var_temp]
             x = x_temp
             variance = var_temp
 
-        return x, xt, variance
+        return x, xt, variance, vart
 
 
     def init_inputs(self, batch_size: int, nodes_output) -> Tuple[np.ndarray, np.ndarray]:

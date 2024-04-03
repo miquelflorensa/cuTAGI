@@ -45,13 +45,13 @@ alphas = 1 - betas
 
 X = np.array(x, dtype=np.float32)
 
-from .diffuser_v0 import Diffuser
-#from .diffuser_heteros_v0 import Diffuser
+#from .diffuser_v0 import Diffuser
+from .diffuser_heteros_v0 import Diffuser
 
 diffuser = Diffuser(
-    num_epochs=100,
+    num_epochs=1,
     #batch_size=2048,
-    batch_size=1024,
+    batch_size=10,
     X_data=X,
     diffusion_steps=diffusion_steps,
     sampling_dim=(10000, 2),

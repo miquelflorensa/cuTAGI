@@ -4,6 +4,7 @@
 *.csv
 debug_data/
 saved_param/
+diffusion_results/
 __pycache__/
 *.DS_Store
 *.pyc
