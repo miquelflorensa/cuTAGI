@@ -37,5 +37,6 @@ PYBIND11_MODULE(cutagi, modo) {
     bind_lstm_layer(modo);
     bind_sequential(modo);
     bind_output_updater(modo);
+    bind_noise_output_updater(modo);
     bind_utils(modo);
 }

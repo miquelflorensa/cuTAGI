@@ -6,16 +6,16 @@ import pytagi.metric as metric
 from examples.data_loader import RegressionDataLoader
 from examples.time_series_forecasting import PredictionViz
 from pytagi import Normalizer
-from pytagi.nn import Linear, OutputUpdater, ReLU, Sequential
+from pytagi.nn import Linear, NoiseOutputUpdater, ReLU, Sequential
 
 
-def main(num_epochs: int = 50, batch_size: int = 10, sigma_v: float = 0.2):
+def main(num_epochs: int = 50, batch_size: int = 10):
     """Run training for the regression"""
     # Dataset
-    x_train_file = "./data/toy_example/x_train_1D.csv"
-    y_train_file = "./data/toy_example/y_train_1D.csv"
-    x_test_file = "./data/toy_example/x_test_1D.csv"
-    y_test_file = "./data/toy_example/y_test_1D.csv"
+    x_train_file = "./data/toy_example/x_train_noise.csv"
+    y_train_file = "./data/toy_example/y_train_noise.csv"
+    x_test_file = "./data/toy_example/x_test_noise.csv"
+    y_test_file = "./data/toy_example/y_test_noise.csv"
 
     train_dtl = RegressionDataLoader(x_file=x_train_file, y_file=y_train_file)
     test_dtl = RegressionDataLoader(
@@ -34,13 +34,14 @@ def main(num_epochs: int = 50, batch_size: int = 10, sigma_v: float = 0.2):
     net = Sequential(
         Linear(1, 50),
         ReLU(),
-        Linear(50, 1),
+        Linear(50, 50),
+        ReLU(),
+        Linear(50, 2),
     )
     # net.to_device("cuda")
     # net.set_threads(8)
 
-    out_updater = OutputUpdater(net.device)
-    var_y = np.full((batch_size,), sigma_v**2, dtype=np.float32)
+    out_updater = NoiseOutputUpdater(net.device)
 
     # -------------------------------------------------------------------------#
     # Training
@@ -57,7 +58,6 @@ def main(num_epochs: int = 50, batch_size: int = 10, sigma_v: float = 0.2):
             out_updater.update(
                 output_states=net.output_z_buffer,
                 mu_obs=y,
-                var_obs=var_y,
                 delta_states=net.input_delta_z_buffer,
             )
 
@@ -68,6 +68,10 @@ def main(num_epochs: int = 50, batch_size: int = 10, sigma_v: float = 0.2):
             # Training metric
             pred = Normalizer.unstandardize(m_pred, train_dtl.y_mean, train_dtl.y_std)
             obs = Normalizer.unstandardize(y, train_dtl.y_mean, train_dtl.y_std)
+            # print('pred:', pred)
+            # print('obs:', obs)
+            # pred = even positions of pred
+            pred = pred[::2]
             mse = metric.mse(pred, obs)
             mses.append(mse)
 
@@ -88,9 +92,10 @@ def main(num_epochs: int = 50, batch_size: int = 10, sigma_v: float = 0.2):
     for x, y in test_batch_iter:
         # Predicion
         m_pred, v_pred = net(x)
+        aux = np.exp(m_pred[1::2] + 0.5 * v_pred[1::2])
 
-        mu_preds.extend(m_pred)
-        var_preds.extend(v_pred + sigma_v**2)
+        mu_preds.extend(m_pred[::2])
+        var_preds.extend(v_pred[1::2] + aux)
         x_test.extend(x)
         y_test.extend(y)
 
@@ -104,6 +109,13 @@ def main(num_epochs: int = 50, batch_size: int = 10, sigma_v: float = 0.2):
 
     x_test = Normalizer.unstandardize(x_test, train_dtl.x_mean, train_dtl.x_std)
     y_test = Normalizer.unstandardize(y_test, train_dtl.y_mean, train_dtl.y_std)
+
+    # Sort the predictions based on x_test
+    sort_idx = np.argsort(x_test)
+    x_test = x_test[sort_idx]
+    y_test = y_test[sort_idx]
+    mu_preds = mu_preds[sort_idx]
+    std_preds = std_preds[sort_idx]
 
     # Compute log-likelihood
     mse = metric.mse(mu_preds, y_test)
@@ -119,7 +131,7 @@ def main(num_epochs: int = 50, batch_size: int = 10, sigma_v: float = 0.2):
         y_test=y_test,
         y_pred=mu_preds,
         sy_pred=std_preds,
-        std_factor=3,
+        std_factor=1,
         label="diag",
         title="Diagonal covariance",
     )

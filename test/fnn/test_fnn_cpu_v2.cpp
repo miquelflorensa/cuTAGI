@@ -111,8 +111,8 @@ void fnn_v2()
                                   train_db.sigma_x, train_db.mu_y,
                                   train_db.sigma_y, 100, n_x, n_y, true);
 
-    Sequential model(Linear(1, 50), ReLU(), Linear(50, 1));
-    model.load("test_model/test.bin");
+    Sequential model(Linear(1, 50), ReLU(), Linear(50, 2));
+    // model.load("test_model/test.bin");
     model.set_threads(1);
 
     //////////////////////////////////////////////////////////////////////
@@ -120,7 +120,7 @@ void fnn_v2()
     //////////////////////////////////////////////////////////////////////
     unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
     std::default_random_engine seed_e(seed);
-    int batch_size = 10;
+    int batch_size = 1;
     float sigma_obs = 0.06;
     int iters = test_db.num_data / batch_size;
     std::vector<float> var_obs(batch_size * n_y, pow(sigma_obs, 2));
@@ -128,6 +128,9 @@ void fnn_v2()
     std::vector<float> y_batch(batch_size * n_y, 0.0f);
     std::vector<int> batch_idx(batch_size);
     auto data_idx = create_range(train_db.num_data);
+
+    NoiseOutputUpdater output_updater(model.device);
+
     for (int e = 0; e < 1; e++) {
         // if (e > 0) {
         //     // Shuffle data
@@ -143,14 +146,17 @@ void fnn_v2()
             model.forward(x_batch);
             int check = 1;
 
+            output_updater.update(*model.output_z_buffer, y_batch,
+                                  *model.input_delta_z_buffer);
+
             // // Output layer
             // update_output_delta_z(*model.output_z_buffer, y_batch, var_obs,
             //                       model.input_delta_z_buffer->delta_mu,
             //                       model.input_delta_z_buffer->delta_var);
 
             // // Backward pass
-            // model.backward();
-            // model.step();
+            model.backward();
+            model.step();
         }
     }
 
@@ -183,7 +189,7 @@ void fnn_v2()
         model.forward(test_x_batch);
 
         // Collect the output data
-        for (int j = 0; j < n_y * test_batch_size; j++) {
+        for (int j = 0; j < n_y * 2 * test_batch_size; j++) {
             mu_a_batch_out[j] = model.output_z_buffer->mu_a[j];
             var_a_batch_out[j] = model.output_z_buffer->var_a[j];
         }
@@ -207,6 +213,12 @@ void fnn_v2()
     // Compute metrics
     auto mse = mean_squared_error(my, y_test);
     auto log_lik = avg_univar_log_lik(my, y_test, sy);
+
+    // for (int i = 0; i < 300; i++) {
+    //     std::cout << "i: " << i << " mu_a_out: " << my[i]
+    //               << " y_test: " << y_test[i] << " sy: " << sy[i] <<
+    //               std::endl;
+    // }
 
     // Display results
     std::cout << "\n%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\n";
