@@ -8,6 +8,7 @@ from pytagi.nn.activation import (
     Softmax,
     Softplus,
     Tanh,
+    AGVI,
 )
 from pytagi.nn.batch_norm import BatchNorm2d
 from pytagi.nn.conv2d import Conv2d

@@ -6,10 +6,10 @@ import pytagi.metric as metric
 from examples.data_loader import RegressionDataLoader
 from examples.time_series_forecasting import PredictionViz
 from pytagi import Normalizer
-from pytagi.nn import Linear, NoiseOutputUpdater, ReLU, Sequential
+from pytagi.nn import Linear, NoiseOutputUpdater, ReLU, Sequential, AGVI
 
 
-def main(num_epochs: int = 50, batch_size: int = 10):
+def main(num_epochs: int = 50, batch_size: int = 1):
     """Run training for the regression"""
     # Dataset
     x_train_file = "./data/toy_example/x_train_noise.csv"
@@ -32,14 +32,15 @@ def main(num_epochs: int = 50, batch_size: int = 10):
 
     # Network
     net = Sequential(
-        Linear(1, 50),
+        Linear(1, 150),
         ReLU(),
-        Linear(50, 50),
+        Linear(150, 150),
         ReLU(),
-        Linear(50, 2),
+        Linear(150, 2),
+        AGVI(),
     )
     # net.to_device("cuda")
-    # net.set_threads(8)
+    #net.set_threads(1)
 
     out_updater = NoiseOutputUpdater(net.device)
 
@@ -92,10 +93,11 @@ def main(num_epochs: int = 50, batch_size: int = 10):
     for x, y in test_batch_iter:
         # Predicion
         m_pred, v_pred = net(x)
-        aux = np.exp(m_pred[1::2] + 0.5 * v_pred[1::2])
+        #aux = np.exp(m_pred[1::2] + 0.5 * v_pred[1::2])
 
         mu_preds.extend(m_pred[::2])
-        var_preds.extend(v_pred[1::2] + aux)
+        var_preds.extend(v_pred[1::2] + m_pred[1::2])
+        #var_preds.extend(v_pred[1::2] + aux)
         x_test.extend(x)
         y_test.extend(y)
 

@@ -40,75 +40,50 @@ void compute_delta_z_noise(std::vector<float> &mu_a, std::vector<float> &var_a,
                            std::vector<float> &jcb, std::vector<float> &obs,
                            int start_chunk, int end_chunk,
                            std::vector<float> &delta_mu,
-                           std::vector<float> &delta_var)
-/*
- */
-{
-    float zero_pad = 0;
-    float tmp = 0;
+                           std::vector<float> &delta_var) {
+    const float zero_pad = 0.0f;
 
-    // iterate over the odd columns from chunk
     for (int col = start_chunk; col < end_chunk; col += 2) {
-        // mu_V2_bar_tilde = np.exp(mu_a + 0.5 * var_a)
-        // var_V2_bar_tilde = np.exp(2 * mu_a + var_a) * (np.exp(var_a) - 1)
-        // cov_V2_bar_tilde = var_a * mu_V2_bar_tilde
-        float mu_V2_bar_tilde = exp(mu_a[col + 1] + 0.5 * var_a[col + 1]);
-        float var_V2_bar_tilde =
-            exp(2 * mu_a[col + 1] + var_a[col + 1]) * (exp(var_a[col + 1]) - 1);
-        float cov_V2_bar_tilde = var_a[col + 1] * mu_V2_bar_tilde;
+        float mu_V2_bar_tilde = mu_a[col + 1];
+        float var_V2_bar_tilde = var_a[col + 1];
+        float cov_V2_bar_tilde = jcb[col + 1];
 
-        // cov_y_V2 = mu_V2_bar_tilde
         float cov_y_V2 = mu_V2_bar_tilde;
-
-        // mu_V2 = mu_V2_bar_tilde
-        // var_V2 = 3 * var_V2_bar_tilde + 2 * mu_V2_bar_tilde**2
         float mu_V2 = mu_V2_bar_tilde;
-        float var_V2 = 3 * var_V2_bar_tilde + 2 * pow(mu_V2_bar_tilde, 2);
+        float var_V2 =
+            3.0f * var_V2_bar_tilde + 2.0f * mu_V2_bar_tilde * mu_V2_bar_tilde;
 
-        // mu_V = 0
-        // var_V = mu_V2
-        float mu_V = 0;
-        float var_V = mu_V2;
+        float var_a_col = var_a[col];
+        float mu_a_col = mu_a[col];
+        float jcb_col = jcb[col];
+        float var_sum = var_a_col + mu_V2;
 
-        tmp = jcb[col] / (var_a[col] + var_V);
-        if (isinf(tmp) || isnan(tmp)) {
+        float tmp = jcb_col / var_sum;
+        if (std::isinf(tmp) || std::isnan(tmp)) {
             delta_mu[col] = zero_pad;
             delta_var[col] = zero_pad;
         } else {
-            delta_mu[col] = tmp * (obs[col / 2] - mu_a[col]);
-            delta_var[col] = -tmp * jcb[col];
+            float obs_diff = obs[col / 2] - mu_a_col;
+            delta_mu[col] = tmp * obs_diff;
+            delta_var[col] = -tmp * jcb_col;
         }
 
-        // mu_V_pos = mu_V + jcb / (var_a + var_V) * (obs - mu_a)
-        // var_V_pos = var_V - jcb / (var_a + var_V) * jcb
-        float mu_V_pos =
-            mu_V + cov_y_V2 / (var_a[col] + var_V) * (obs[col / 2] - mu_a[col]);
-        float var_V_pos = var_V - cov_y_V2 / (var_a[col] + var_V) * cov_y_V2;
+        float mu_V_pos = 0 + cov_y_V2 / var_sum * (obs[col / 2] - mu_a_col);
+        float var_V_pos = mu_V2 - cov_y_V2 / var_sum * cov_y_V2;
 
-        // mu_V2_pos = mu_V_pos**2 + var_V_pos
-        // var_V2_pos = 2 * var_V_pos**2 + 4 * var_V_pos * mu_V_pos**2
-        float mu_V2_pos = pow(mu_V_pos, 2) + var_V_pos;
-        float var_V2_pos =
-            2 * pow(var_V_pos, 2) + 4 * var_V_pos * pow(mu_V_pos, 2);
+        float mu_V2_pos = mu_V_pos * mu_V_pos + var_V_pos;
+        float var_V2_pos = 2.0f * var_V_pos * var_V_pos +
+                           4.0f * var_V_pos * mu_V_pos * mu_V_pos;
 
-        // k = var_V2_bar_tilde / var_V2
-        // mu_V2_bar_tilde_pos = mu_V2_bar_tilde + k * (mu_V2_pos - mu_V2)
-        // var_V2_bar_tilde_pos = var_V2_bar_tilde + k**2 * (var_V2_pos -
-        // var_V2)
         float k = var_V2_bar_tilde / var_V2;
         float mu_V2_bar_tilde_pos = mu_V2_bar_tilde + k * (mu_V2_pos - mu_V2);
         float var_V2_bar_tilde_pos =
-            var_V2_bar_tilde + pow(k, 2) * (var_V2_pos - var_V2);
+            var_V2_bar_tilde + k * k * (var_V2_pos - var_V2);
 
-        // Jv = cov_V2_bar_tilde / var_V2_bar_tilde
-        // delta_mu = Jv * (mu_V2_bar_tilde_pos - mu_V2_bar_tilde)
-        // delta_var = Jv * (var_V2_bar_tilde_pos - var_V2_bar_tilde) * Jv
-        // To see: maybe we need to add state but I think Ha just computes the
-        // innovation vector
         float Jv = cov_V2_bar_tilde / var_V2_bar_tilde;
         delta_mu[col + 1] = Jv * (mu_V2_bar_tilde_pos - mu_V2_bar_tilde);
         delta_var[col + 1] =
-            Jv * (var_V2_bar_tilde_pos - var_V2_bar_tilde) * Jv;
+            Jv * Jv * (var_V2_bar_tilde_pos - var_V2_bar_tilde);
     }
 }
 
