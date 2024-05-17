@@ -9,7 +9,7 @@ from pytagi import Normalizer
 from pytagi.nn import Linear, NoiseOutputUpdater, ReLU, Sequential, AGVI
 
 
-def main(num_epochs: int = 50, batch_size: int = 1):
+def main(num_epochs: int = 50, batch_size: int = 10):
     """Run training for the regression"""
     # Dataset
     x_train_file = "./data/toy_example/x_train_noise.csv"

@@ -477,15 +477,16 @@ void agvi_mean_var(std::vector<float> const &mu_z,
                    std::vector<float> &var_a, std::vector<float> &jcb_a)
 
 {
-    for (int i = start_chunk; i < end_chunk; i += 2) {
-        mu_a[i] = mu_z[i];
-        var_a[i] = var_z[i];
-        jcb_a[i] = jcb_z[i];
-
-        mu_a[i + 1] = expf(mu_z[i + 1] + 0.5 * var_z[i + 1]);
-        var_a[i + 1] =
-            expf(2 * mu_z[i + 1] + var_z[i + 1]) * (expf(var_z[i + 1]) - 1);
-        jcb_a[i + 1] = var_z[i + 1] * mu_a[i + 1];
+    for (int i = start_chunk; i < end_chunk; i++) {
+        if (i % 2 == 0) {
+            mu_a[i] = mu_z[i];
+            var_a[i] = var_z[i];
+            jcb_a[i] = jcb_z[i];
+        } else {
+            mu_a[i] = expf(mu_z[i] + 0.5 * var_z[i]);
+            var_a[i] = expf(2 * mu_z[i] + var_z[i]) * (expf(var_z[i]) - 1);
+            jcb_a[i] = var_z[i] * mu_a[i];
+        }
     }
 }
 
@@ -494,15 +495,15 @@ void agvi_mean_var_mp(std::vector<float> const &mu_z,
                       std::vector<float> &jcb_z, int n,
                       unsigned int num_threads, std::vector<float> &mu_a,
                       std::vector<float> &var_a, std::vector<float> &jcb_a) {
-    int start_chunk, end_chunk;
     std::vector<std::thread> threads;
     threads.reserve(num_threads);
 
     int n_per_thread = n / num_threads;
     int extra = n % num_threads;
 
-    for (int i = 0; i < num_threads; i++) {
-        int start_chunk = i * n_per_thread + std::min(i, extra);
+    for (unsigned int i = 0; i < num_threads; ++i) {
+        int start_chunk =
+            i * n_per_thread + std::min(static_cast<int>(i), extra);
         int end_chunk = start_chunk + n_per_thread + (i < extra ? 1 : 0);
 
         threads.emplace_back([=, &mu_z, &var_z, &jcb_z, &mu_a, &var_a, &jcb_a] {
@@ -1233,11 +1234,12 @@ void AGVI::forward(BaseHiddenStates &input_states,
 
     int start_chunk = 0;
     int end_chunk = input_states.actual_size * input_states.block_size;
+    std::cout << "End chunk: " << end_chunk << std::endl;
     if (this->num_threads > 1) {
         agvi_mean_var_mp(input_states.mu_a, input_states.var_a,
-                         input_states.jcb, input_states.actual_size,
-                         this->num_threads, output_states.mu_a,
-                         output_states.var_a, output_states.jcb);
+                         input_states.jcb, end_chunk, this->num_threads,
+                         output_states.mu_a, output_states.var_a,
+                         output_states.jcb);
     } else {
         agvi_mean_var(input_states.mu_a, input_states.var_a, input_states.jcb,
                       start_chunk, end_chunk, output_states.mu_a,
