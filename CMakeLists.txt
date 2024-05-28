@@ -183,6 +183,7 @@ set(CPU_SOURCES
   test/cross_val/cross_val.cpp
   test/autoencoder/test_autoencoder_v2.cpp
   test/lstm/test_lstm_v2.cpp
+  test/fnn_heteros/test_fnn_heteros_cpu_v2.cpp
 )
 
 # Sources code for CUDA

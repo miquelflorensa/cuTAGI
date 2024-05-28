@@ -18,6 +18,7 @@
 #include "test/cross_val/cross_val.h"
 #include "test/fnn/test_fnn_cpu_v2.h"
 #include "test/fnn/test_fnn_mnist_cpu.h"
+#include "test/fnn_heteros/test_fnn_heteros_cpu_v2.h"
 #include "test/lstm/test_lstm_v2.h"
 #include "test/mha/test_mha_cpu.h"
 #include "test/test_cpu.h"
@@ -70,6 +71,8 @@ int main(int argc, char *argv[]) {
         auto is_passed = test_autoecoder_v2();
     } else if (user_input_file.compare("lstm_toy") == 0) {
         auto is_passed = test_lstm_v2();
+    } else if (user_input_file.compare("test_heteros_v2") == 0) {
+        auto is_passed = test_fnn_heteros_cpu_v2();
     } else {
         task_command_cpu(user_input, path);
     }
