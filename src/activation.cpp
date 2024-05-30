@@ -1234,7 +1234,6 @@ void AGVI::forward(BaseHiddenStates &input_states,
 
     int start_chunk = 0;
     int end_chunk = input_states.actual_size * input_states.block_size;
-    std::cout << "End chunk: " << end_chunk << std::endl;
     if (this->num_threads > 1) {
         agvi_mean_var_mp(input_states.mu_a, input_states.var_a,
                          input_states.jcb, end_chunk, this->num_threads,
