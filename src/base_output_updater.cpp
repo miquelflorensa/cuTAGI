@@ -3,7 +3,7 @@
 // Description:  ...
 // Authors:      Luong-Ha Nguyen & James-A. Goulet
 // Created:      December 27, 2023
-// Updated:      May 21, 2024
+// Updated:      June 08, 2024
 // Contact:      luongha.nguyen@gmail.com & james.goulet@polymtl.ca
 // License:      This code is released under the MIT License.
 ////////////////////////////////////////////////////////////////////////////////
@@ -217,8 +217,9 @@ void BaseOutputUpdater::update_output_delta_z_noise(
  */
 {
     int start_chunk = 0;
-    int end_chunk = obs.size * 2;
-
+    //int end_chuck = obs.size * 2;
+    int end_chunk = obs.size * 3;
+  
     delta_states.reset_zeros();
 
     compute_delta_z_noise(output_states.mu_a, output_states.var_a,
