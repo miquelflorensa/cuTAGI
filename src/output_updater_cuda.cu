@@ -3,7 +3,7 @@
 // Description:  ...
 // Authors:      Luong-Ha Nguyen & James-A. Goulet
 // Created:      December 27, 2023
-// Updated:      May 21, 2024
+// Updated:      June 08, 2024
 // Contact:      luongha.nguyen@gmail.com & james.goulet@polymtl.ca
 // License:      This code is released under the MIT License.
 ////////////////////////////////////////////////////////////////////////////////
@@ -33,6 +33,7 @@ __global__ void update_delta_z_using_indices_cuda(
         }
     }
 }
+
 __global__ void update_delta_z_cuda(float const *mu_a, float const *var_a,
                                     float const *jcb, float const *obs,
                                     float const *var_obs, int size,
@@ -52,61 +53,150 @@ __global__ void update_delta_z_cuda(float const *mu_a, float const *var_a,
     }
 }
 
+// __global__ void update_delta_z_cuda_noise(float const *mu_a, float const *var_a,
+//                                           float const *jcb, float const *obs,
+//                                           int size, float *delta_mu,
+//                                           float *delta_var) {
+//     int col = blockIdx.x * blockDim.x + threadIdx.x;
+//     const float zero_pad = 0.0f;
+//     //printf("Col: %d\n", col);
+
+//     if (col % 2 == 0) {
+//         float mu_V2_bar_tilde = expf(mu_a[col + 1] + 0.5f * var_a[col + 1]);
+//         float var_V2_bar_tilde = expf(2.0f * mu_a[col + 1] + var_a[col + 1]) *
+//                                 (expf(var_a[col + 1]) - 1.0f);
+//         float cov_V2_bar_tilde = var_a[col + 1] * mu_V2_bar_tilde;
+
+//         // float mu_V2_bar_tilde = mu_a[col + 1];
+//         // float var_V2_bar_tilde = var_a[col + 1];
+//         // float cov_V2_bar_tilde = jcb[col + 1];
+
+//         float cov_y_V2 = mu_V2_bar_tilde;
+//         float mu_V2 = mu_V2_bar_tilde;
+//         float var_V2 =
+//             3.0f * var_V2_bar_tilde + 2.0f * mu_V2_bar_tilde * mu_V2_bar_tilde;
+
+//         float var_a_col = var_a[col];
+//         float mu_a_col = mu_a[col];
+//         float jcb_col = jcb[col];
+//         float var_sum = var_a_col + mu_V2;
+
+//         float tmp = jcb_col / var_sum;
+//         if (std::isinf(tmp) || std::isnan(tmp)) {
+//             delta_mu[col] = zero_pad;
+//             delta_var[col] = zero_pad;
+//         } else {
+//             float obs_diff = obs[col / 2] - mu_a_col;
+//             delta_mu[col] = tmp * obs_diff;
+//             delta_var[col] = -tmp * jcb_col;
+//         }
+
+//         float mu_V_pos = 0 + cov_y_V2 / var_sum * (obs[col / 2] - mu_a_col);
+//         float var_V_pos = mu_V2 - cov_y_V2 / var_sum * cov_y_V2;
+
+//         float mu_V2_pos = mu_V_pos * mu_V_pos + var_V_pos;
+//         float var_V2_pos = 2.0f * var_V_pos * var_V_pos +
+//                            4.0f * var_V_pos * mu_V_pos * mu_V_pos;
+
+//         float k = var_V2_bar_tilde / var_V2;
+//         float mu_V2_bar_tilde_pos = mu_V2_bar_tilde + k * (mu_V2_pos - mu_V2);
+//         float var_V2_bar_tilde_pos =
+//             var_V2_bar_tilde + k * k * (var_V2_pos - var_V2);
+
+//         float Jv = cov_V2_bar_tilde / var_V2_bar_tilde;
+//         delta_mu[col + 1] = Jv * (mu_V2_bar_tilde_pos - mu_V2_bar_tilde);
+//         delta_var[col + 1] =
+//                 Jv * Jv * (var_V2_bar_tilde_pos - var_V2_bar_tilde);
+//     }
+// }
+
 __global__ void update_delta_z_cuda_noise(float const *mu_a, float const *var_a,
                                           float const *jcb, float const *obs,
                                           int size, float *delta_mu,
                                           float *delta_var) {
-    int col = blockIdx.x * blockDim.x + threadIdx.x;
+    int column = blockIdx.x * blockDim.x + threadIdx.x;
     const float zero_pad = 0.0f;
 
-    if (col % 2 == 0) {
-        float mu_V2_bar_tilde = expf(mu_a[col + 1] + 0.5f * var_a[col + 1]);
-        float var_V2_bar_tilde = expf(2.0f * mu_a[col + 1] + var_a[col + 1]) *
-                                 (expf(var_a[col + 1]) - 1.0f);
-        float cov_V2_bar_tilde = var_a[col + 1] * mu_V2_bar_tilde;
 
-        // float mu_V2_bar_tilde = mu_a[col + 1];
-        // float var_V2_bar_tilde = var_a[col + 1];
-        // float cov_V2_bar_tilde = jcb[col + 1];
 
-        float cov_y_V2 = mu_V2_bar_tilde;
-        float mu_V2 = mu_V2_bar_tilde;
-        float var_V2 =
-            3.0f * var_V2_bar_tilde + 2.0f * mu_V2_bar_tilde * mu_V2_bar_tilde;
+    if (column % 12 == 0) {
+        for (int col = column; col < column + 12; col += 3) {
+            float mu_V2_bar_tilde = expf(mu_a[col + 1] + 0.5f * var_a[col + 1]);
+            float var_V2_bar_tilde = expf(2.0f * mu_a[col + 1] + var_a[col + 1]) *
+                                    (expf(var_a[col + 1]) - 1.0f);
+            float cov_V2_bar_tilde = var_a[col + 1] * mu_V2_bar_tilde;
 
-        float var_a_col = var_a[col];
-        float mu_a_col = mu_a[col];
-        float jcb_col = jcb[col];
-        float var_sum = var_a_col + mu_V2;
+            float cov_y_V2 = mu_V2_bar_tilde;
+            float mu_V2 = mu_V2_bar_tilde;
+            float var_V2 =
+                3.0f * var_V2_bar_tilde + 2.0f * mu_V2_bar_tilde * mu_V2_bar_tilde;
 
-        float tmp = jcb_col / var_sum;
-        if (std::isinf(tmp) || std::isnan(tmp)) {
-            delta_mu[col] = zero_pad;
-            delta_var[col] = zero_pad;
-        } else {
-            float obs_diff = obs[col / 2] - mu_a_col;
-            delta_mu[col] = tmp * obs_diff;
-            delta_var[col] = -tmp * jcb_col;
+            float var_a_col = var_a[col];
+            float mu_a_col = mu_a[col];
+            float jcb_col = jcb[col];
+            float var_sum = var_a_col + mu_V2;
+
+            float tmp = jcb_col / var_sum;
+            if (std::isinf(tmp) || std::isnan(tmp)) {
+                delta_mu[col] = zero_pad;
+                delta_var[col] = zero_pad;
+            } else {
+                float obs_diff = obs[col / 3] - mu_a_col;
+                delta_mu[col] = tmp * obs_diff;
+                delta_var[col] = -tmp * jcb_col;
+            }
+
+            float mu_V_pos = 0 + cov_y_V2 / var_sum * (obs[col / 3] - mu_a_col);
+            float var_V_pos = mu_V2 - cov_y_V2 / var_sum * cov_y_V2;
+
+            float mu_V2_pos = mu_V_pos * mu_V_pos + var_V_pos;
+            float var_V2_pos = 2.0f * var_V_pos * var_V_pos +
+                            4.0f * var_V_pos * mu_V_pos * mu_V_pos;
+
+            float k = var_V2_bar_tilde / var_V2;
+            float mu_V2_bar_tilde_pos = mu_V2_bar_tilde + k * (mu_V2_pos - mu_V2);
+            float var_V2_bar_tilde_pos =
+                var_V2_bar_tilde + k * k * (var_V2_pos - var_V2);
+
+            float Jv = cov_V2_bar_tilde / var_V2_bar_tilde;
+            delta_mu[col + 1] = Jv * (mu_V2_bar_tilde_pos - mu_V2_bar_tilde);
+            delta_var[col + 1] =
+                    Jv * Jv * (var_V2_bar_tilde_pos - var_V2_bar_tilde);
         }
 
-        float mu_V_pos = 0 + cov_y_V2 / var_sum * (obs[col / 2] - mu_a_col);
-        float var_V_pos = mu_V2 - cov_y_V2 / var_sum * cov_y_V2;
+        float Vc_x_m_0 = delta_mu[column + 1] * delta_mu[column + 7];
+        float Vc_x_v_0 = delta_var[column + 1] * delta_var[column + 7]
+                                + delta_var[column + 1] * powf(delta_mu[column + 7], 2.0f)
+                                + powf(delta_mu[column + 1], 2.0f) * delta_var[column + 7];
+        float Vc_y_m_0 = delta_mu[column + 4] * delta_mu[column + 10];
+        float Vc_y_v_0 = delta_var[column + 4] * delta_var[column + 10]
+                                + delta_var[column + 4] * powf(delta_mu[column + 10], 2.0f)
+                                + powf(delta_mu[column + 4], 2.0f) * delta_var[column + 10];
+        float Vc_x_m_1 = delta_mu[column + 7] * delta_mu[column + 1];
+        float Vc_x_v_1 = 999999999.9f;
+        float Vc_y_m_1 = delta_mu[column + 10] * delta_mu[column + 4];
+        float Vc_y_v_1 = 999999999.9f;
 
-        float mu_V2_pos = mu_V_pos * mu_V_pos + var_V_pos;
-        float var_V2_pos = 2.0f * var_V_pos * var_V_pos +
-                           4.0f * var_V_pos * mu_V_pos * mu_V_pos;
+        Vc_x_v_0 += var_a[column + 2];
+        Vc_y_v_0 += var_a[column + 5];
+        Vc_x_v_1 += var_a[column + 8];
+        Vc_y_v_1 += var_a[column + 11];
 
-        float k = var_V2_bar_tilde / var_V2;
-        float mu_V2_bar_tilde_pos = mu_V2_bar_tilde + k * (mu_V2_pos - mu_V2);
-        float var_V2_bar_tilde_pos =
-            var_V2_bar_tilde + k * k * (var_V2_pos - var_V2);
+        delta_mu[column+2] = (var_a[column + 2] / Vc_x_v_0) * (Vc_x_m_0 - mu_a[column + 2]);
+        delta_var[column+2] = -var_a[column + 2] / Vc_x_v_0 * var_a[column + 2];
 
-        float Jv = cov_V2_bar_tilde / var_V2_bar_tilde;
-        delta_mu[col + 1] = Jv * (mu_V2_bar_tilde_pos - mu_V2_bar_tilde);
-        delta_var[col + 1] =
-            Jv * Jv * (var_V2_bar_tilde_pos - var_V2_bar_tilde);
+        delta_mu[column+5] = (var_a[column + 5] / Vc_y_v_0) * (Vc_y_m_0 - mu_a[column + 5]);
+        delta_var[column+5] = -var_a[column + 5] / Vc_y_v_0 * var_a[column + 5];
+
+        delta_mu[column+8] = (var_a[column + 8] / Vc_x_v_1) * (Vc_x_m_1 - mu_a[column + 8]);
+        delta_var[column+8] = -var_a[column + 8] / Vc_x_v_1 * var_a[column + 8];
+
+        delta_mu[column+11] = (var_a[column + 11] / Vc_y_v_1) * (Vc_y_m_1 - mu_a[column + 11]);
+        delta_var[column+11] = -var_a[column + 11] / Vc_y_v_1 * var_a[column + 11];
+
     }
 }
+
 
 OutputUpdaterCuda::OutputUpdaterCuda() {}
 
@@ -190,10 +280,11 @@ void NoiseOutputUpdaterCuda::set_num_cuda_threads(unsigned int num_threads) {
 }
 
 void NoiseOutputUpdaterCuda::update_output_delta_z_noise(
-    BaseHiddenStates &output_states, BaseObservation &obs,
-    BaseDeltaStates &delta_states)
+                                                BaseHiddenStates &output_states,
+                                                BaseObservation &obs,
+                                                BaseDeltaStates &delta_states)
 /*
- */
+*/
 {
     // Cast to cuda object
     HiddenStateCuda *cu_output_states =
@@ -216,8 +307,10 @@ void NoiseOutputUpdaterCuda::update_output_delta_z_noise(
     int blocks =
         (num_states + this->num_cuda_threads - 1) / this->num_cuda_threads;
 
+
     update_delta_z_cuda_noise<<<blocks, this->num_cuda_threads>>>(
         cu_output_states->d_mu_a, cu_output_states->d_var_a,
-        cu_output_states->d_jcb, cu_obs->d_mu_obs, num_states,
-        cu_delta_states->d_delta_mu, cu_delta_states->d_delta_var);
+        cu_output_states->d_jcb, cu_obs->d_mu_obs,
+        num_states, cu_delta_states->d_delta_mu, cu_delta_states->d_delta_var);
+
 }
