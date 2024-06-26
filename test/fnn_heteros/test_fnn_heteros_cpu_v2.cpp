@@ -18,11 +18,11 @@ void fnn_heteros_old() {
         y_test_path;
     SavePath path;
     path.curr_path = get_current_dir();
-    std::string data_path = path.curr_path + "/data/toy_example";
-    x_train_dir = data_path + "/x_train_noise.csv";
-    y_train_dir = data_path + "/y_train_noise.csv";
-    x_test_dir = data_path + "/x_test_noise.csv";
-    y_test_dir = data_path + "/y_test_noise.csv";
+    std::string data_path = path.curr_path + "/data/UCI/Boston_housing";
+    x_train_dir = data_path + "/x_train.csv";
+    y_train_dir = data_path + "/y_train.csv";
+    x_test_dir = data_path + "/x_test.csv";
+    y_test_dir = data_path + "/y_test.csv";
     x_train_path.push_back(x_train_dir);
     y_train_path.push_back(y_train_dir);
     x_test_path.push_back(x_test_dir);
@@ -31,9 +31,9 @@ void fnn_heteros_old() {
     // Create TAGI network
     Network network;
     network.layers = {1, 1, 1};
-    network.nodes = {1, 150, 2};
+    network.nodes = {13, 150, 2};
     network.activations = {0, 4, 0};
-    network.batch_size = 20;
+    network.batch_size = 10;
     network.noise_type = "heteros";
     network.sigma_v = 0.0;
     network.noise_gain = 1;
@@ -44,14 +44,14 @@ void fnn_heteros_old() {
 
     int n_epochs = 50;
 
-    int n_x = 1;
+    int n_x = 13;
     int n_y = 1;
     std::vector<float> mu_x, sigma_x, mu_y, sigma_y;
     auto train_db = get_dataloader(x_train_path, y_train_path, mu_x, sigma_x,
-                                   mu_y, sigma_y, 800, n_x, n_y, true);
+                                   mu_y, sigma_y, 455, n_x, n_y, true);
     auto test_db = get_dataloader(x_test_path, y_test_path, train_db.mu_x,
                                   train_db.sigma_x, train_db.mu_y,
-                                  train_db.sigma_y, 200, n_x, n_y, true);
+                                  train_db.sigma_y, 51, n_x, n_y, true);
 
     unsigned seed = 0;
     std::default_random_engine seed_e(seed);
@@ -180,26 +180,26 @@ void fnn_heteros_v2()
         y_test_path;
     SavePath path;
     path.curr_path = get_current_dir();
-    std::string data_path = path.curr_path + "/data/toy_example";
-    x_train_dir = data_path + "/x_train_noise.csv";
-    y_train_dir = data_path + "/y_train_noise.csv";
-    x_test_dir = data_path + "/x_test_noise.csv";
-    y_test_dir = data_path + "/y_test_noise.csv";
+    std::string data_path = path.curr_path + "/data/UCI/Boston_housing";
+    x_train_dir = data_path + "/x_train.csv";
+    y_train_dir = data_path + "/y_train.csv";
+    x_test_dir = data_path + "/x_test.csv";
+    y_test_dir = data_path + "/y_test.csv";
     x_train_path.push_back(x_train_dir);
     y_train_path.push_back(y_train_dir);
     x_test_path.push_back(x_test_dir);
     y_test_path.push_back(y_test_dir);
 
-    int n_x = 1;
+    int n_x = 13;
     int n_y = 1;
     std::vector<float> mu_x, sigma_x, mu_y, sigma_y;
     auto train_db = get_dataloader(x_train_path, y_train_path, mu_x, sigma_x,
-                                   mu_y, sigma_y, 800, n_x, n_y, true);
+                                   mu_y, sigma_y, 455, n_x, n_y, true);
     auto test_db = get_dataloader(x_test_path, y_test_path, train_db.mu_x,
                                   train_db.sigma_x, train_db.mu_y,
-                                  train_db.sigma_y, 200, n_x, n_y, true);
+                                  train_db.sigma_y, 51, n_x, n_y, true);
 
-    Sequential model(Linear(1, 150), ReLU(), Linear(150, 2), AGVI());
+    Sequential model(Linear(13, 150), ReLU(), Linear(150, 2), AGVI());
     model.set_threads(8);
 
     //////////////////////////////////////////////////////////////////////
@@ -207,7 +207,7 @@ void fnn_heteros_v2()
     //////////////////////////////////////////////////////////////////////
     unsigned seed = 0;
     std::default_random_engine seed_e(seed);
-    int batch_size = 20;
+    int batch_size = 10;
     int iters = test_db.num_data / batch_size;
     std::vector<float> x_batch(batch_size * n_x, 0.0f);
     std::vector<float> y_batch(batch_size * n_y, 0.0f);
@@ -242,7 +242,7 @@ void fnn_heteros_v2()
     //////////////////////////////////////////////////////////////////////
     // Testing
     //////////////////////////////////////////////////////////////////////
-    int test_batch_size = 20;
+    int test_batch_size = 10;
     int test_iters = test_db.num_data / test_batch_size;
     std::vector<float> test_x_batch(test_batch_size * n_x, 0.0f);
     std::vector<float> test_y_batch(test_batch_size * n_y, 0.0f);

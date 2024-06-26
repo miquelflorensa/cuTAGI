@@ -5,8 +5,8 @@ net_name: fc_heteros_mnist
 load_param: false
 num_epochs: 5
 num_classes: 10
-num_train_data: 60000
-num_test_data: 10000
+num_train_data: 455
+num_test_data: 51
 mu: 0.1309
 sigma: 1
 device: cpu

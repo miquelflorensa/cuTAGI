@@ -108,7 +108,7 @@ def main(num_epochs: int = 50, batch_size: int = 10):
 
         if cuda:
             aux = np.exp(m_pred[1::2] + 0.5 * v_pred[1::2])
-            var_preds.extend(v_pred[1::2] + aux)
+            var_preds.extend(v_pred[::2] + aux)
         else:
             var_preds.extend(v_pred[1::2] + m_pred[1::2])
 
