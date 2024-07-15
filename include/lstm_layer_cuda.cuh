@@ -20,7 +20,7 @@
 class LSTMCuda : public BaseLayerCuda {
    public:
     int seq_len = 1;
-    int _batch_size = 1;
+    int _batch_size = 0;
     float act_omega = 0.0000001f;
     float gain_w;
     float gain_b;
@@ -71,15 +71,6 @@ class LSTMCuda : public BaseLayerCuda {
     void forward(BaseHiddenStates &input_states,
                  BaseHiddenStates &output_states,
                  BaseTempStates &temp_states) override;
-
-    void state_backward(BaseBackwardStates &next_bwd_states,
-                        BaseDeltaStates &input_delta_states,
-                        BaseDeltaStates &output_delta_states,
-                        BaseTempStates &temp_states) override;
-
-    void param_backward(BaseBackwardStates &next_bwd_states,
-                        BaseDeltaStates &delta_states,
-                        BaseTempStates &temp_states) override;
 
     void backward(BaseDeltaStates &input_delta_states,
                   BaseDeltaStates &output_delta_states,
