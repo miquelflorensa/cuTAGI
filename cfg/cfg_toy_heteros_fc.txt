@@ -4,10 +4,10 @@ data_name: toy_example
 net_name: fc_heteros_toy
 load_param: false
 num_epochs: 50
-num_train_data: 400
-num_test_data: 200
+num_train_data: 455
+num_test_data: 51
 device: cpu
-x_train_dir: data/toy_example/x_train_1D_noise_inference.csv
-y_train_dir: data/toy_example/y_train_1D_noise_inference.csv
-x_test_dir: data/toy_example/x_test_1D_noise_inference.csv
-y_test_dir: data/toy_example/y_test_1D_noise_inference.csv
+x_train_dir: data/UCI/Boston_housing/x_train.csv
+y_train_dir: data/UCI/Boston_housing/y_train.csv
+x_test_dir: data/UCI/Boston_housing/x_test.csv
+y_test_dir: data/UCI/Boston_housing/y_test.csv

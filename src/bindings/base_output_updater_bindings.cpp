@@ -31,3 +31,14 @@ void bind_output_updater(pybind11::module_& modo)
              "Updates the output states using specified indices.")
         .def_readwrite("device", &OutputUpdater::device);
 }
+
+void bind_noise_output_updater(pybind11::module_& modo)
+/*
+ */
+{
+    pybind11::class_<NoiseOutputUpdater, std::shared_ptr<NoiseOutputUpdater>>(
+        modo, "NoiseOutputUpdater")
+        .def(pybind11::init<const std::string>())
+        .def("update", &NoiseOutputUpdater::update)
+        .def_readwrite("device", &NoiseOutputUpdater::device);
+}

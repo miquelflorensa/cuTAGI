@@ -23,6 +23,7 @@
 #include "test/embedding/test_emb_cpu.h"
 #include "test/fnn/test_fnn_cpu_v2.h"
 #include "test/fnn/test_fnn_mnist_cpu.h"
+#include "test/fnn_heteros/test_fnn_heteros_cpu_v2.h"
 #include "test/lstm/test_lstm_v2.h"
 #include "test/mha/test_mha_cpu.h"
 #include "test/resnet/test_resnet_1d_toy.h"
@@ -91,8 +92,7 @@ int main(int argc, char* argv[]) {
         auto is_passed = test_resnet_cifar10();
     } else {
         if (user_input.device == "cuda" && is_cuda_available()) {
-            std::cout << "Run on CUDA device "
-                      << "\n";
+            std::cout << "Run on CUDA device " << "\n";
             task_command(user_input, path);
         } else {
             task_command_cpu(user_input, path);

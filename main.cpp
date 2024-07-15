@@ -18,6 +18,7 @@
 #include "test/cross_val/cross_val.h"
 #include "test/fnn/test_fnn_cpu_v2.h"
 #include "test/fnn/test_fnn_mnist_cpu.h"
+#include "test/fnn_heteros/test_fnn_heteros_cpu_v2.h"
 #include "test/lstm/test_lstm_v2.h"
 #include "test/mha/test_mha_cpu.h"
 #include "test/resnet/test_resnet_1d_toy.h"
