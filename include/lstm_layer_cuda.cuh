@@ -4,7 +4,7 @@
 //               in TAGI
 // Authors:      Luong-Ha Nguyen & James-A. Goulet
 // Created:      March 22, 2024
-// Updated:      March 28, 2024
+// Updated:      April 18, 2024
 // Contact:      luongha.nguyen@gmail.com & james.goulet@polymtl.ca
 // License:      This code is released under the MIT License.
 ////////////////////////////////////////////////////////////////////////////////
@@ -20,7 +20,7 @@
 class LSTMCuda : public BaseLayerCuda {
    public:
     int seq_len = 1;
-    int _batch_size = 1;
+    int _batch_size = 0;
     float act_omega = 0.0000001f;
     float gain_w;
     float gain_b;
@@ -56,7 +56,7 @@ class LSTMCuda : public BaseLayerCuda {
 
     void get_number_param();
 
-    void init_weight_bias();
+    void init_weight_bias() override;
 
     void prepare_input(BaseHiddenStates &input_state);
 
@@ -72,14 +72,10 @@ class LSTMCuda : public BaseLayerCuda {
                  BaseHiddenStates &output_states,
                  BaseTempStates &temp_states) override;
 
-    void state_backward(BaseBackwardStates &next_bwd_states,
-                        BaseDeltaStates &input_delta_states,
-                        BaseDeltaStates &output_delta_states,
-                        BaseTempStates &temp_states) override;
-
-    void param_backward(BaseBackwardStates &next_bwd_states,
-                        BaseDeltaStates &delta_states,
-                        BaseTempStates &temp_states) override;
+    void backward(BaseDeltaStates &input_delta_states,
+                  BaseDeltaStates &output_delta_states,
+                  BaseTempStates &temp_states,
+                  bool state_udapte = true) override;
 
     std::unique_ptr<BaseLayer> to_host() override;
 

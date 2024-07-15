@@ -84,7 +84,7 @@ CNN_LAYERNORM = Sequential(
 )
 
 
-def main(num_epochs: int = 10, batch_size: int = 512, sigma_v: float = 2.0):
+def main(num_epochs: int = 10, batch_size: int = 256, sigma_v: float = 2.0):
     """
     Run classification training on the MNIST dataset using a custom neural model.
 
@@ -108,9 +108,9 @@ def main(num_epochs: int = 10, batch_size: int = 512, sigma_v: float = 2.0):
     metric = HRCSoftmaxMetric(num_classes=10)
 
     # Network configuration
-    net = FNN_LAYERNORM
-    # net.to_device("cuda")
-    # net.set_threads(16)
+    net = CNN
+    net.to_device("cuda")
+    net.set_threads(16)
     out_updater = OutputUpdater(net.device)
 
     # Training

@@ -3,7 +3,7 @@
 // Description:  ...
 // Authors:      Luong-Ha Nguyen & James-A. Goulet
 // Created:      January 03, 2024
-// Updated:      January 19, 2024
+// Updated:      April 18, 2024
 // Contact:      luongha.nguyen@gmail.com & james.goulet@polymtl.ca
 // License:      This code is released under the MIT License.
 ////////////////////////////////////////////////////////////////////////////////
@@ -65,20 +65,16 @@ class Conv2d : public BaseLayer {
 
     void get_number_param();
 
-    void init_weight_bias();
+    void init_weight_bias() override;
 
     void forward(BaseHiddenStates &input_states,
                  BaseHiddenStates &output_states,
                  BaseTempStates &temp_states) override;
 
-    void state_backward(BaseBackwardStates &next_bwd_states,
-                        BaseDeltaStates &input_delta_states,
-                        BaseDeltaStates &output_delta_states,
-                        BaseTempStates &temp_states) override;
-
-    void param_backward(BaseBackwardStates &next_bwd_states,
-                        BaseDeltaStates &delta_states,
-                        BaseTempStates &temp_states) override;
+    void backward(BaseDeltaStates &input_delta_states,
+                  BaseDeltaStates &output_delta_states,
+                  BaseTempStates &temp_states,
+                  bool state_udapte = true) override;
 
     using BaseLayer::storing_states_for_training;
     using BaseLayer::to_cuda;

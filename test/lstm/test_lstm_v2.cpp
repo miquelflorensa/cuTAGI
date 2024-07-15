@@ -127,7 +127,7 @@ void debug_lstm_v2()
     const std::vector<int> LAYERS = {1, 7, 7, 1};
     const std::vector<int> NODES = {1, 5, 5, 1};
     const std::vector<int> ACTIVATIONS = {0, 0, 0, 0};
-    const int BATCH_SIZE = 5;
+    const int BATCH_SIZE = 1;
     const int INPUT_SEQ_LEN = 5;
     const int OUTPUT_SEQ_LEN = 1;
     const int SEQ_STRIDE = 1;
@@ -158,7 +158,7 @@ void debug_lstm_v2()
     std::string model_name = "lstm";
     std::string test_name = "toy";
     // save_net_param(test_name, model_name, param_path, tagi_net.theta);
-    load_net_param(test_name, model_name, param_path, tagi_net.theta);
+    // load_net_param(test_name, model_name, param_path, tagi_net.theta);
     tagi_net.theta_gpu.copy_host_to_device();
 
     Sequential model(LSTM(1, 5, input_seq_len), LSTM(5, 5, input_seq_len),
@@ -238,7 +238,7 @@ void lstm_v2()
     // Model
     Sequential model(LSTM(1, 5, input_seq_len), LSTM(5, 5, input_seq_len),
                      Linear(5 * input_seq_len, 1));
-    // model.to_device("cuda");
+    model.to_device("cuda");
     // model.set_threads(8);
 
     OutputUpdater output_updater(model.device);
@@ -248,8 +248,8 @@ void lstm_v2()
     //////////////////////////////////////////////////////////////////////
     unsigned seed = 0;
     std::default_random_engine seed_e(seed);
-    int n_epochs = 20;
-    int batch_size = 10;
+    int n_epochs = 1;
+    int batch_size = 1;
     float sigma_obs = 2.0;
 
     int iters = train_db.num_data / batch_size;
@@ -277,7 +277,7 @@ void lstm_v2()
         std::cout << "Epoch #" << e + 1 << "/" << n_epochs << "\n";
         std::cout << "Training...\n";
         auto start = std::chrono::steady_clock::now();
-        for (int i = 0; i < iters; i++) {
+        for (int i = 0; i < 1; i++) {
             // Load data
             get_batch_idx(data_idx, i * batch_size, batch_size, batch_idx);
             get_batch_data(train_db.x, batch_idx, train_db.nx, x_batch);
