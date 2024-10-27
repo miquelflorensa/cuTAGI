@@ -58,6 +58,12 @@ Args:
             mu_z[woho * (col / woho) * fo + col % woho + row * woho] = sum_mu;
             var_z[woho * (col / woho) * fo + col % woho + row * woho] = sum_var;
         }
+
+        // if (var_z[woho * (col / woho) * fo + col % woho + row * woho] < 0.0f)
+        // {
+        //     var_z[woho * (col / woho) * fo + col % woho + row * woho] = 1e-6;
+        //     printf("Negative variance detected in layer 1%d\n", row);
+        // }
     }
 }
 
@@ -336,6 +342,11 @@ Args:
 
         __syncthreads();
     }
+    // printf("sum_mu: %f\n", sum_mu);
+    // if (sum_var < 0.0f) {
+    //     sum_var = 1e-6;
+    //     printf("Negative variance detected in layer 1%d\n", row);
+    // }
     if (col < woho * B && row < fo) {
         int idx_out = woho * col_div_woho * fo + col_mod_woho + row * woho;
         if (bias) {
@@ -345,6 +356,11 @@ Args:
             mu_z[idx_out] = sum_mu;
             var_z[idx_out] = sum_var;
         }
+        // if (var_z[idx_out] < 0.0f) {
+        //     var_z[idx_out] = 1e-6f;
+        //     printf("Negative variance detected in layer 2%d\n", row);
+        // }
+        // printf("var_z[%d]: %f\n", idx_out, var_z[idx_out]);
     }
 }
 
@@ -483,6 +499,11 @@ __global__ void conv2d_fwd_mean_var_cuda_v2(
                 T bias_var = bias ? __ldg(&var_b[row]) : static_cast<T>(0);
                 mu_z[idx_out] = __fadd_rn(tmp_mu[j][t], bias_mu);
                 var_z[idx_out] = __fadd_rn(tmp_var[j][t], bias_var);
+
+                // if (var_z[idx_out] < 0.0f) {
+                //     // var_z[idx_out] = 1e-6;
+                //     printf("Negative variance detected in layer 3%d\n", row);
+                // }
             }
         }
     }

@@ -14,10 +14,11 @@ np.random.seed(0)
 def main(num_epochs: int = 50, batch_size: int = 10):
     """Run training for the regression"""
     # Dataset
-    x_train_file = "./data/toy_example/x_train_noise.csv"
-    y_train_file = "./data/toy_example/y_train_noise.csv"
-    x_test_file = "./data/toy_example/x_test_noise.csv"
-    y_test_file = "./data/toy_example/y_test_noise.csv"
+    x_train_file = "./data/UCI/Boston_housing/x_train.csv"
+    y_train_file = "./data/UCI/Boston_housing/y_train.csv"
+    x_test_file = "./data/UCI/Boston_housing/x_test.csv"
+    y_test_file = "./data/UCI/Boston_housing/y_test.csv"
+
 
     train_dtl = RegressionDataLoader(x_file=x_train_file, y_file=y_train_file)
     test_dtl = RegressionDataLoader(
@@ -34,7 +35,7 @@ def main(num_epochs: int = 50, batch_size: int = 10):
 
     cuda = True
     net = Sequential(
-        Linear(1, 128), ReLU(), Linear(128, 128), ReLU(), Linear(128, 2), EvenExp()
+        Linear(13, 128), ReLU(), Linear(128, 128), ReLU(), Linear(128, 2), EvenExp()
     )
     if cuda:
         net.to_device("cuda")
@@ -50,6 +51,7 @@ def main(num_epochs: int = 50, batch_size: int = 10):
         batch_iter = train_dtl.create_data_loader(batch_size)
 
         for x, y in batch_iter:
+            print(x.shape, y.shape)
             # Feed forward
             m_pred, _ = net(x)
 

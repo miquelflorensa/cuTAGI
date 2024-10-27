@@ -829,6 +829,21 @@ __global__ void sigmoid_mean_var_cuda(float const *mu_z, float const *var_z,
         mu_a[col] = tmp;
         jcb[col] = tmp * (1.0f - tmp);
         var_a[col] = tmp * (1.0f - tmp) * var_z[col] * tmp * (1.0f - tmp);
+
+        float cov_x_sigmoid_x = jcb[col] * var_a[col];
+
+        // mu(X1X2) = μ1 μ2 + cov(X1, X2)
+        mu_a[col] = mu_z[col] * mu_a[col] + cov_x_sigmoid_x;
+
+        // var(X1X2) = σ_1^2σ_2^2 + cov(X1, X2)^2 + 2cov(X1, X2)μ_1μ_2 + σ_1^2
+        // μ_2^2 + σ_2^2 μ_1^2
+        var_a[col] = var_z[col] * var_a[col] +
+                     cov_x_sigmoid_x * cov_x_sigmoid_x +
+                     2 * cov_x_sigmoid_x * mu_z[col] * mu_a[col] +
+                     var_z[col] * mu_a[col] * mu_a[col] +
+                     var_a[col] * mu_z[col] * mu_z[col];
+
+        jcb[col] = mu_a[col] + mu_z[col] * mu_a[col] * (1.0f - mu_a[col]);
     }
 }
 

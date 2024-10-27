@@ -184,6 +184,77 @@ void ResNetBlock::forward(BaseHiddenStates &input_states,
 /**/
 
 {
+    std::cout << "Res net CPU block forward with timesteps not implemented yet"
+              << std::endl;
+    int batch_size = input_states.block_size;
+    // Main block
+    if (batch_size != this->_batch_size) {
+        this->_batch_size = batch_size;
+        this->init_input_buffer();
+        if (this->shortcut != nullptr) {
+            this->init_shortcut_state();
+            if (this->training) {
+                this->init_shortcut_delta_state();
+            }
+        }
+    }
+    // Store jacobian matrix for backward pass
+    if (this->training) {
+        int act_size = input_states.actual_size * input_states.block_size;
+        if (this->bwd_states->size != act_size) {
+            this->allocate_bwd_vector(act_size);
+        }
+        this->fill_bwd_vector(input_states);
+    }
+
+    // Make a copy of input states for residual connection
+    this->input_z->copy_from(input_states, this->input_size * batch_size);
+
+    this->main_block->forward(input_states, output_states, temp_states);
+    int num_states = output_states.block_size * this->output_size;
+
+    // Shortcut
+    if (this->shortcut != nullptr) {
+        this->shortcut->forward(*this->input_z, *this->shortcut_output_z,
+                                temp_states);
+
+        add_shortcut_mean_var(this->shortcut_output_z->mu_a,
+                              this->shortcut_output_z->var_a, num_states,
+                              output_states.mu_a, output_states.var_a);
+
+    } else {
+        add_shortcut_mean_var(this->input_z->mu_a, this->input_z->var_a,
+                              num_states, output_states.mu_a,
+                              output_states.var_a);
+    }
+
+    output_states.width = this->out_width;
+    output_states.height = this->out_height;
+    output_states.depth = this->out_channels;
+    output_states.block_size = batch_size;
+    output_states.actual_size = this->output_size;
+
+    // Fill jacobian matrix for output with ones
+    if (this->training) {
+        this->fill_output_states(output_states);
+    }
+}
+
+void ResNetBlock::forward_cuda(BaseHiddenStates &input_states,
+                               BaseHiddenStates &output_states,
+                               BaseTempStates &temp_states,
+                               const std::vector<float> &timesteps) {
+    std::cout << "Res net block cuda forward with timesteps not implemented yet"
+              << std::endl;
+}
+
+void ResNetBlock::forward(BaseHiddenStates &input_states,
+                          BaseHiddenStates &output_states,
+                          BaseTempStates &temp_states,
+                          const std::vector<float> &timesteps)
+/**/
+
+{
     int batch_size = input_states.block_size;
     // Main block
     if (batch_size != this->_batch_size) {

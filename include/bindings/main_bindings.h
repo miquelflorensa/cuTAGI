@@ -22,6 +22,7 @@
 #include "layer_block_bindings.h"
 #include "linear_layer_bindings.h"
 #include "lstm_layer_bindings.h"
+#include "module_bindings.h"
 #include "norm_layer_bindings.h"
 #include "pooling_layer_bindings.h"
 #include "resnet_block_bindings.h"

@@ -110,6 +110,15 @@ class ResNetBlock : public BaseLayer {
                  BaseHiddenStates &output_states,
                  BaseTempStates &temp_states) override;
 
+    void forward(BaseHiddenStates &input_states,
+                 BaseHiddenStates &output_states, BaseTempStates &temp_states,
+                 const std::vector<float> &timesteps);
+
+    void forward_cuda(BaseHiddenStates &input_states,
+                      BaseHiddenStates &output_states,
+                      BaseTempStates &temp_states,
+                      const std::vector<float> &timesteps);
+
     void backward(BaseDeltaStates &input_delta_states,
                   BaseDeltaStates &output_delta_states,
                   BaseTempStates &temp_states,

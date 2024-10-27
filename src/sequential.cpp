@@ -252,6 +252,14 @@ void Sequential::forward(const std::vector<float> &mu_x,
     // Batch size
     int batch_size = mu_x.size() / this->layers.front()->get_input_size();
 
+    // Create vector of size batch_size
+    // std::vector<float> timesteps(batch_size);
+
+    // for (int i = 0; i < batch_size; i++) {
+    //     timesteps[i] = mu_x[i * mu_x.size() / batch_size];
+    //     // std::cout << timesteps[i] << std::endl;
+    // }
+
     // Lazy initialization
     if (this->z_buffer_block_size == 0) {
         this->z_buffer_block_size = batch_size;
@@ -284,6 +292,49 @@ void Sequential::forward(const std::vector<float> &mu_x,
     // Forward pass for all layers
     for (auto &layer : this->layers) {
         auto *current_layer = layer.get();
+        // std::cout << "Layer: " << current_layer->get_layer_info() <<
+        // std::endl; std::cout << "Input size: " <<
+        // this->input_z_buffer->block_size
+        //           << std::endl;
+
+        // if layer = ResNetBlock, then forward pass for each block
+        //         if (current_layer->get_layer_type() ==
+        //         LayerType::ResNetBlock) {
+        //             int num_blocks = this->input_z_buffer->size / batch_size;
+
+        // #ifdef USE_CUDA
+        //             if (this->device.compare("cuda") == 0) {
+        //                 HiddenStateCuda *cu_input_states =
+        //                     dynamic_cast<HiddenStateCuda
+        //                     *>(this->input_z_buffer.get());
+        //                 cu_input_states->to_host();
+        //             }
+        // #endif
+
+        //             // Operations on hidden states
+        //             for (int i = 0; i < this->input_z_buffer->size; i++) {
+        //                 this->input_z_buffer->mu_a[i] += timesteps[i /
+        //                 num_blocks];
+        //             }
+
+        // #ifdef USE_CUDA
+        //             if (this->device.compare("cuda") == 0) {
+        //                 HiddenStateCuda *cu_input_states =
+        //                     dynamic_cast<HiddenStateCuda
+        //                     *>(this->input_z_buffer.get());
+        //                 cu_input_states->chunks_to_device(this->input_z_buffer->size);
+        //             }
+        // #endif
+
+        //             // std::cout << "this->input_z_buffer->mu_a[0]: " <<
+        //             // this->input_z_buffer->mu_a[0] << std::endl;
+        //             // this->chunks_to_device(this->input_z_buffer->size);
+        //             // init_output_state_buffer();
+        //             //
+        //             this->input_z_buffer->set_input_x(this->input_z_buffer->mu_a,
+        //                                               this->input_z_buffer->var_a,
+        //                                               batch_size);
+        //         }
 
         current_layer->forward(*this->input_z_buffer, *this->output_z_buffer,
                                *this->temp_states);

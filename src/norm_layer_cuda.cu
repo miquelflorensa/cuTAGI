@@ -1012,6 +1012,7 @@ void LayerNormCuda::init_weight_bias()
 {
     this->num_weights = this->normalized_shape[0];
     float scale = 1.0f / this->num_weights;
+    // float scale = 1e-5f;
     this->mu_w.resize(this->num_weights, 1.0f);
     this->var_w.resize(this->num_weights, scale);
     if (this->bias) {
@@ -1394,6 +1395,7 @@ void BatchNorm2dCuda::init_weight_bias()
     this->num_weights = this->num_features;
     this->num_biases = this->num_features;
 
+    // float scale = 1e-5f;
     float scale = 1.0f / this->num_weights;
     this->mu_w.resize(this->num_weights, 1.0f);
     this->var_w.resize(this->num_weights, scale);

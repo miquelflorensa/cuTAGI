@@ -130,6 +130,7 @@ set(CPU_SOURCES
   src/slstm_layer.cpp
   src/activation.cpp
   src/sequential.cpp
+  src/module.cpp
   src/output_layer_update_cpu.cpp
   src/base_layer.cpp
   src/data_struct.cpp
@@ -151,6 +152,7 @@ set(CPU_SOURCES
   src/bindings/slstm_layer_bindings.cpp
   src/bindings/activation_bindings.cpp
   src/bindings/sequential_bindings.cpp
+  # src/bindings/module_bindings.cpp
   src/bindings/layer_block_bindings.cpp
   src/bindings/resnet_block_bindings.cpp
   src/bindings/base_output_updater_bindings.cpp
@@ -162,6 +164,10 @@ set(CPU_SOURCES
   test/fnn/test_fnn_cpu_v2.cpp
   test/heteros/test_fnn_heteros_cpu_v2.cpp
   test/fnn/test_fnn_mnist_cpu.cpp
+  test/fnn/fnn_diffuser.cpp
+  test/fnn/unet_diffuser.cpp
+
+
   # test/cross_val/cross_val.cpp
   test/autoencoder/test_autoencoder_v2.cpp
   test/lstm/test_lstm_v2.cpp

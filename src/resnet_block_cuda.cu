@@ -50,7 +50,7 @@ LayerType ResNetBlockCuda::get_layer_type() const
 /*
  */
 {
-    return LayerType::ResNetBlock;
+    return LayerType::ResNetBlockCuda;
 }
 
 int ResNetBlockCuda::get_max_num_states()
@@ -251,6 +251,99 @@ void ResNetBlockCuda::forward(BaseHiddenStates &input_states,
     this->input_z->copy_from(input_states, this->input_size * batch_size);
 
     this->main_block->forward(input_states, output_states, temp_states);
+
+    int num_states = output_states.block_size * this->output_size;
+    constexpr unsigned int THREADS = 256;
+    unsigned int grid_size = (num_states + THREADS - 1) / THREADS;
+    HiddenStateCuda *cu_output_states =
+        dynamic_cast<HiddenStateCuda *>(&output_states);
+
+    // Shortcut
+    if (this->shortcut != nullptr)  // use a transformation function to match
+                                    // the output size of the main block
+    {
+        this->shortcut->forward(*this->input_z, *this->shortcut_output_z,
+                                temp_states);
+
+        HiddenStateCuda *cu_shortcut_output_z =
+            dynamic_cast<HiddenStateCuda *>(this->shortcut_output_z.get());
+
+        add_shortcut_mean_var_cuda<<<grid_size, THREADS>>>(
+            cu_shortcut_output_z->d_mu_a, cu_shortcut_output_z->d_var_a,
+            num_states, cu_output_states->d_mu_a, cu_output_states->d_var_a);
+
+    } else {
+        HiddenStateCuda *cu_shortcut_output_z =
+            dynamic_cast<HiddenStateCuda *>(this->input_z.get());
+
+        add_shortcut_mean_var_cuda<<<grid_size, THREADS>>>(
+            cu_shortcut_output_z->d_mu_a, cu_shortcut_output_z->d_var_a,
+            num_states, cu_output_states->d_mu_a, cu_output_states->d_var_a);
+    }
+
+    output_states.width = this->out_width;
+    output_states.height = this->out_height;
+    output_states.depth = this->out_channels;
+    output_states.block_size = batch_size;
+    output_states.actual_size = this->output_size;
+
+    // Fill jacobian matrix for output with ones
+    if (this->training) {
+        HiddenStateCuda *cu_input_states =
+            dynamic_cast<HiddenStateCuda *>(this->input_z.get());
+
+        int out_size = this->output_size * batch_size;
+        unsigned int out_blocks = (out_size + THREADS - 1) / THREADS;
+        fill_output_states_on_device<<<out_blocks, THREADS>>>(
+            out_size, cu_output_states->d_jcb);
+    }
+}
+
+void ResNetBlockCuda::forward_cuda(BaseHiddenStates &input_states,
+                                   BaseHiddenStates &output_states,
+                                   BaseTempStates &temp_states,
+                                   const std::vector<float> &timesteps)
+/**/
+
+{
+    int batch_size = input_states.block_size;
+
+    // Main block
+    if (batch_size != this->_batch_size) {
+        this->_batch_size = batch_size;
+        this->init_input_buffer();
+        if (this->shortcut != nullptr) {
+            this->init_shortcut_state();
+            if (this->training) {
+                this->init_shortcut_delta_state();
+            }
+        }
+    }
+    // Store jacobian matrix for backward pass
+    if (this->training) {
+        HiddenStateCuda *cu_input_states =
+            dynamic_cast<HiddenStateCuda *>(&input_states);
+        BackwardStateCuda *cu_bwd_states =
+            dynamic_cast<BackwardStateCuda *>(this->bwd_states.get());
+
+        int act_size = cu_input_states->actual_size * batch_size;
+        if (cu_bwd_states->size != act_size) {
+            cu_bwd_states->size = act_size;
+            cu_bwd_states->allocate_memory();
+        }
+        cudaMemcpy(cu_bwd_states->d_mu_a, cu_input_states->d_mu_a,
+                   act_size * sizeof(float), cudaMemcpyDeviceToDevice);
+        cudaMemcpy(cu_bwd_states->d_jcb, cu_input_states->d_jcb,
+                   act_size * sizeof(float), cudaMemcpyDeviceToDevice);
+    }
+
+    // Make a copy of input states for residual connection
+    this->input_z->copy_from(input_states, this->input_size * batch_size);
+
+    auto *layer_block = dynamic_cast<LayerBlock *>(this->main_block.get());
+
+    layer_block->forward_cuda(input_states, output_states, temp_states,
+                              timesteps);
 
     int num_states = output_states.block_size * this->output_size;
     constexpr unsigned int THREADS = 256;

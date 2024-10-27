@@ -6,7 +6,7 @@ import pytagi.metric as metric
 from examples.data_loader import RegressionDataLoader
 from examples.time_series_forecasting import PredictionViz
 from pytagi import Normalizer
-from pytagi.nn import Linear, OutputUpdater, ReLU, Sequential
+from pytagi.nn import Linear, OutputUpdater, ReLU, Module
 
 
 def main(num_epochs: int = 50, batch_size: int = 10, sigma_v: float = 0.2):
@@ -31,7 +31,7 @@ def main(num_epochs: int = 50, batch_size: int = 10, sigma_v: float = 0.2):
     viz = PredictionViz(task_name="regression", data_name="1d_toy")
 
     # Network
-    net = Sequential(
+    net = Module(
         Linear(1, 50),
         ReLU(),
         Linear(50, 1),

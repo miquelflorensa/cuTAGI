@@ -14,8 +14,10 @@
 #include <string>
 
 #include "test/autoencoder/test_autoencoder_v2.h"
+#include "test/fnn/fnn_diffuser.h"
 #include "test/fnn/test_fnn_cpu_v2.h"
 #include "test/fnn/test_fnn_mnist_cpu.h"
+#include "test/fnn/unet_diffuser.h"
 #include "test/heteros/test_fnn_heteros_cpu_v2.h"
 #include "test/load_state_dict/test_load_state_dict.h"
 #include "test/lstm/test_lstm_v2.h"
@@ -44,6 +46,10 @@ int main(int argc, char* argv[]) {
         auto is_passed = test_fnn_heteros_cpu_v2();
     } else if (user_input_file.compare("test_fc_mnist") == 0) {
         auto is_passed = test_fnn_mnist();
+    } else if (user_input_file.compare("fnn_diffuser") == 0) {
+        auto is_passed = fnn_diffuser();
+    } else if (user_input_file.compare("unet_diffuser") == 0) {
+        auto is_passed = unet_diffuser();
     } else if (user_input_file.compare("autoencoder_mnist") == 0) {
         auto is_passed = test_autoecoder_v2();
     } else if (user_input_file.compare("lstm_toy") == 0) {

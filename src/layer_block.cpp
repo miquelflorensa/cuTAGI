@@ -1,5 +1,7 @@
 #include "../include/layer_block.h"
 
+#include "../include/resnet_block_cuda.cuh"
+
 #ifdef USE_CUDA
 #include "../include/base_layer_cuda.cuh"
 #endif
@@ -171,6 +173,98 @@ void LayerBlock::forward(BaseHiddenStates &input_states,
     }
 
     // Ensure output states contains the output of the last layer in the block
+    if (num_layers % 2 == 0) {
+        output_states.swap(input_states);
+    }
+
+    output_states.width = this->out_width;
+    output_states.height = this->out_height;
+    output_states.depth = this->out_channels;
+    output_states.block_size = batch_size;
+    output_states.actual_size = this->output_size;
+}
+
+void LayerBlock::forward_cuda(BaseHiddenStates &input_states,
+                              BaseHiddenStates &output_states,
+                              BaseTempStates &temp_states,
+                              const std::vector<float> &timesteps)
+/*
+ */
+{
+    // Cast input and outputs objects to pointers for  an efficient loop
+    // swapping. It avoids swapping each members in their objects
+    BaseHiddenStates *casted_input_states =
+        dynamic_cast<BaseHiddenStates *>(&input_states);
+    BaseHiddenStates *casted_output_states =
+        dynamic_cast<BaseHiddenStates *>(&output_states);
+
+    // Forward pass for all layers
+    int batch_size = input_states.block_size;
+    int num_layers = this->layers.size();
+
+    bool add_time = false;
+
+    for (int i = 0; i < num_layers; ++i) {
+        auto *current_layer = this->layers[i].get();
+
+        if (current_layer->get_layer_type() == LayerType::ResNetBlockCuda) {
+            ResNetBlockCuda *resnet_block =
+                dynamic_cast<ResNetBlockCuda *>(current_layer);
+            resnet_block->forward_cuda(*casted_input_states,
+                                       *casted_output_states, temp_states,
+                                       timesteps);
+        } else {
+            if (current_layer->get_layer_type() == LayerType::Activation &&
+                !add_time) {
+                add_time = true;
+            } else if (current_layer->get_layer_type() ==
+                           LayerType::Activation &&
+                       add_time) {
+                add_time = false;
+                int num_blocks = casted_input_states->size / batch_size;
+#ifdef USE_CUDA
+                HiddenStateCuda *cu_input_states =
+                    dynamic_cast<HiddenStateCuda *>(casted_input_states);
+                cu_input_states->to_host();
+
+                // Operations on hidden states
+                for (int i = 0; i < casted_input_states->size; i++) {
+                    cu_input_states->mu_a[i] += timesteps[i / num_blocks];
+                }
+
+                cu_input_states->chunks_to_device(casted_input_states->size);
+
+#endif
+            }
+            current_layer->forward(*casted_input_states, *casted_output_states,
+                                   temp_states);
+
+#ifdef USE_CUDA
+            HiddenStateCuda *cu_input_states =
+                dynamic_cast<HiddenStateCuda *>(casted_input_states);
+            cu_input_states->to_host();
+
+            // Operations on hidden states
+            for (int i = 0; i < casted_input_states->size; i++) {
+                if (cu_input_states->var_a[i] < 0) {
+                    std::cout << "Block negative variance on layer: "
+                              << current_layer->get_layer_name() << std::endl;
+                    std::cout << "var_a[" << i
+                              << "] = " << cu_input_states->var_a[i]
+                              << std::endl;
+                    abort();
+                }
+            }
+
+            cu_input_states->chunks_to_device(casted_input_states->size);
+
+#endif
+        }
+        std::swap(casted_input_states, casted_output_states);
+    }
+
+    // Ensure output states contains the output of the last layer in the
+    // block
     if (num_layers % 2 == 0) {
         output_states.swap(input_states);
     }

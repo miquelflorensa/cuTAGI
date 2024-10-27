@@ -58,6 +58,9 @@ __global__ void device_raw_bias_update(float const *delta_mu_b,
     int col = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (col < size) {
+        if (var_b[col] <= 0.0f) {
+            var_b[col] = 1e-5f;
+        }
         mu_b[col] += delta_mu_b[col];
         var_b[col] += delta_var_b[col];
     }

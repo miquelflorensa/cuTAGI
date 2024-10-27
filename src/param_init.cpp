@@ -78,6 +78,8 @@ std::tuple<std::vector<float>, std::vector<float>> gaussian_param_init(
     // Weights
     for (int i = 0; i < N; i++) {
         // Variance
+        // scale = scale * 0.9f;
+        gain = 0.2f;
         S[i] = pow(gain * scale, 2);
 
         // Get normal distribution

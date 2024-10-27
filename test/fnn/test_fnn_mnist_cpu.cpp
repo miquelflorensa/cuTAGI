@@ -25,9 +25,48 @@
 #include "../../include/dataloader.h"
 // #include "../../include/debugger.h"
 #include "../../include/linear_layer.h"
+#include "../../include/module.h"
 #include "../../include/norm_layer.h"
 #include "../../include/pooling_layer.h"
-#include "../../include/sequential.h"
+#include "../include/base_layer_cuda.cuh"
+#include "../include/linear_layer_cuda.cuh"
+
+class FNN : public Module {
+   public:
+    FNN()
+        : Module(Linear(784, 4096), ReLU(), Linear(4096, 4096), ReLU(),
+                 Linear(4096, 11)) {}
+
+    // Function that returns name of a specific layer
+    std::string get_layer_name(int idx) {
+        return this->layers[idx]->get_layer_name();
+    }
+
+    Linear l1 = Linear(784, 4096);
+    ReLU r1 = ReLU();
+    Linear l2 = Linear(4096, 4096);
+    ReLU r2 = ReLU();
+    Linear l3 = Linear(4096, 11);
+
+    void forward(const std::vector<float> &mu_x,
+                 const std::vector<float> &var_x = std::vector<float>()) {
+        preinit_layer(mu_x, var_x);
+
+        // Forward pass for all layers
+        for (auto &layer : this->layers) {
+            auto *current_layer = layer.get();
+
+            current_layer->forward(*this->input_z_buffer,
+                                   *this->output_z_buffer, *this->temp_states);
+
+            // Swap the pointer holding class
+            std::swap(this->input_z_buffer, this->output_z_buffer);
+        }
+
+        // Output buffer is considered as the final output of network
+        std::swap(this->output_z_buffer, this->input_z_buffer);
+    }
+};
 
 void fnn_mnist() {
     //////////////////////////////////////////////////////////////////////
@@ -66,15 +105,19 @@ void fnn_mnist() {
     //////////////////////////////////////////////////////////////////////
     // TAGI network
     //////////////////////////////////////////////////////////////////////
-    // Sequential model(Linear(784, 4 * 4096), ReLU(), Linear(4 * 4096, 4 *
-    // 4096),
-    //                  ReLU(), Linear(4 * 4096, 11));
+    FNN model;
+
+    std::string second_layer_name = model.get_layer_name(1);
+    std::cout << "Second layer name: " << second_layer_name << "\n";
+
+    std::cout << "First Linear name: " << model.l1.get_layer_name() << "\n";
 
     // Sequential model(Linear(784, 1024), BatchNorm2d(1024), ReLU(),
     //                  Linear(1024, 1024), BatchNorm2d(1024), ReLU(),
     //                  Linear(1024, 11));
 
-    // Sequential model(Linear(784, 100), LayerNorm(std::vector<int>({100})),
+    // Sequential model(Linear(784, 100),
+    // LayerNorm(std::vector<int>({100})),
     //                  ReLU(), Linear(100, 100),
     //                  LayerNorm(std::vector<int>({100})), ReLU(),
     //                  Linear(100, 11));
@@ -84,10 +127,11 @@ void fnn_mnist() {
     //                  AvgPool2d(3, 2), Linear(32 * 4 * 4, 100), ReLU(),
     //                  Linear(100, 11));
 
-    Sequential model(Conv2d(1, 32, 4, false, 1, 1, 1, 28, 28), BatchNorm2d(32),
-                     ReLU(), AvgPool2d(3, 2), Conv2d(32, 64, 5, false),
-                     BatchNorm2d(64), ReLU(), AvgPool2d(3, 2),
-                     Linear(64 * 4 * 4, 128), ReLU(), Linear(128, 11));
+    // Module model(Conv2d(1, 32, 4, false, 1, 1, 1, 28, 28),
+    // BatchNorm2d(32),
+    //              ReLU(), AvgPool2d(3, 2), Conv2d(32, 64, 5, false),
+    //              BatchNorm2d(64), ReLU(), AvgPool2d(3, 2),
+    //              Linear(64 * 4 * 4, 128), ReLU(), Linear(128, 11));
 
     // Sequential model(Conv2d(1, 16, 4, false, 1, 1, 1, 28, 28),
     //                  LayerNorm(std::vector<int>({16, 27, 27})), ReLU(),
@@ -98,6 +142,7 @@ void fnn_mnist() {
 
     // model.set_threads(1);
     model.to_device("cuda");
+
     // model.preinit_layer();
     // model.load("test_model/test_model.bin");
 
@@ -108,11 +153,11 @@ void fnn_mnist() {
     //                      LayerNorm(std::vector<int>({100})), ReLU(),
     //                      Linear(100, 11));
     // Sequential cpu_model(Conv2d(1, 16, 4, false, 1, 1, 1, 28, 28),
-    //                      LayerNorm(std::vector<int>({16, 27, 27})), ReLU(),
-    //                      AvgPool2d(3, 2), Conv2d(16, 32, 5, false),
-    //                      LayerNorm(std::vector<int>({32, 9, 9})), ReLU(),
-    //                      AvgPool2d(3, 2), Linear(32 * 4 * 4, 100), ReLU(),
-    //                      Linear(100, 11));
+    //                      LayerNorm(std::vector<int>({16, 27, 27})),
+    //                      ReLU(), AvgPool2d(3, 2), Conv2d(16, 32, 5,
+    //                      false), LayerNorm(std::vector<int>({32, 9, 9})),
+    //                      ReLU(), AvgPool2d(3, 2), Linear(32 * 4 * 4,
+    //                      100), ReLU(), Linear(100, 11));
 
     // Sequential cpu_model(Linear(784, 100),
     // LayerNorm(std::vector<int>({100})),
@@ -121,9 +166,10 @@ void fnn_mnist() {
     //                      Linear(100, 11));
 
     // Sequential cpu_model(
-    //     Conv2d(1, 16, 4, false, 1, 1, 1, 28, 28), BatchNorm2d(16), ReLU(),
-    //     AvgPool2d(3, 2), Conv2d(16, 32, 5, false), BatchNorm2d(32), ReLU(),
-    //     AvgPool2d(3, 2), Linear(32 * 4 * 4, 100), ReLU(), Linear(100, 11));
+    //     Conv2d(1, 16, 4, false, 1, 1, 1, 28, 28), BatchNorm2d(16),
+    //     ReLU(), AvgPool2d(3, 2), Conv2d(16, 32, 5, false),
+    //     BatchNorm2d(32), ReLU(), AvgPool2d(3, 2), Linear(32 * 4 * 4,
+    //     100), ReLU(), Linear(100, 11));
 
     // // DEBUGGER
     // cpu_model.preinit_layer();
@@ -183,7 +229,8 @@ void fnn_mnist() {
             // model.load("test_model/test_model.bin");
 
             // model_debugger.debug_forward(x_batch);
-            // model_debugger.debug_backward(y_batch, var_obs, idx_ud_batch);
+            // model_debugger.debug_backward(y_batch, var_obs,
+            // idx_ud_batch);
 
             // Output layer
             output_updater.update_using_indices(*model.output_z_buffer, y_batch,
@@ -254,8 +301,10 @@ void fnn_mnist() {
     // auto test_data_idx = create_range(test_db.num_data);
     // for (int i = 0; i < 2; i++) {
     //     // Load data
-    //     get_batch_images_labels(test_db, test_data_idx, test_batch_size, i,
-    //                             x_batch, y_batch, idx_ud_batch, label_batch);
+    //     get_batch_images_labels(test_db, test_data_idx, test_batch_size,
+    //     i,
+    //                             x_batch, y_batch, idx_ud_batch,
+    //                             label_batch);
 
     //     // // Forward pass
     //     model.forward(x_batch);

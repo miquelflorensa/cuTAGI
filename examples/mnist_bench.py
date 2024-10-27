@@ -26,14 +26,28 @@ TAGI_FNN = Sequential(
     Linear(4096, 11),
 )
 
+# TAGI_CNN = Sequential(
+#     Conv2d(1, 16, 4, padding=1, in_width=28, in_height=28),
+#     ReLU(),
+#     AvgPool2d(3, 2),
+#     Conv2d(16, 32, 5),
+#     ReLU(),
+#     AvgPool2d(3, 2),
+#     Linear(32 * 4 * 4, 256),
+#     ReLU(),
+#     Linear(256, 11),
+# )
+
 TAGI_CNN = Sequential(
-    Conv2d(1, 16, 4, padding=1, in_width=28, in_height=28),
+    Conv2d(1, 32, 3, in_width=28, in_height=28),
     ReLU(),
-    AvgPool2d(3, 2),
-    Conv2d(16, 32, 5),
+    Conv2d(32, 64, 3),
     ReLU(),
-    AvgPool2d(3, 2),
-    Linear(32 * 4 * 4, 256),
+    Conv2d(64, 128, 3),
+    ReLU(),
+    Conv2d(128, 256, 3),
+    ReLU(),
+    Linear(256 * 20 * 20, 256),
     ReLU(),
     Linear(256, 11),
 )
@@ -179,7 +193,8 @@ def tagi_trainer(
 
     # Hierachical Softmax
     metric = HRCSoftmaxMetric(num_classes=10)
-    net = TAGI_FNN
+    # net = TAGI_FNN
+    net = TAGI_CNN
     net.to_device(device)
     # net.set_threads(16)
     out_updater = OutputUpdater(net.device)
