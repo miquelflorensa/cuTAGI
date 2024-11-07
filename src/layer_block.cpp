@@ -247,7 +247,7 @@ void LayerBlock::forward_cuda(BaseHiddenStates &input_states,
             // Operations on hidden states
             for (int i = 0; i < casted_input_states->size; i++) {
                 if (cu_input_states->var_a[i] < 0) {
-                    std::cout << "Block negative variance on layer: "
+                    std::cout << "Block negative variance on layer : "
                               << current_layer->get_layer_name() << std::endl;
                     std::cout << "var_a[" << i
                               << "] = " << cu_input_states->var_a[i]

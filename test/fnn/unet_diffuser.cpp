@@ -42,9 +42,9 @@
 #include "./stb_image_write.h"
 
 const int DIFFUSION_STEPS = 1000;
-const int IMG_SIZE = 14;
+const int IMG_SIZE = 24;
 const int N_CHANNELS = 64;
-const int BATCH_SIZE = 16;
+const int BATCH_SIZE = 256;
 const int NEPOCHS = 50;
 const float SIGMA_V = 0.1;
 
@@ -83,73 +83,102 @@ class UNetDiffusion : public Module {
                   // Downsample
                   ReLU(),
                   LayerNorm(std::vector<int>({N_CHANNELS, IMG_SIZE, IMG_SIZE})),
-                  Conv2d(N_CHANNELS, N_CHANNELS * 2, 4, false, 1, 1, 1),
+                  Conv2d(N_CHANNELS, N_CHANNELS * 2, 4, false, 2, 1, 1),
 
                   // Level 1 - 2 ResNet blocks
                   ResNetBlock(create_layer_block(N_CHANNELS * 2, N_CHANNELS * 2,
-                                                 IMG_SIZE - 1)),
+                                                 IMG_SIZE / 2)),
                   ResNetBlock(create_layer_block(N_CHANNELS * 2, N_CHANNELS * 2,
-                                                 IMG_SIZE - 1)),
+                                                 IMG_SIZE / 2)),
 
                   // Level 2
                   ResNetBlock(LayerBlock(
                       // Downsample
                       ReLU(),
                       LayerNorm(std::vector<int>(
-                          {N_CHANNELS * 2, IMG_SIZE - 1, IMG_SIZE - 1})),
-                      Conv2d(N_CHANNELS * 2, N_CHANNELS * 4, 4, false, 1, 1, 1),
+                          {N_CHANNELS * 2, IMG_SIZE / 2, IMG_SIZE / 2})),
+                      Conv2d(N_CHANNELS * 2, N_CHANNELS * 4, 4, false, 2, 1, 1),
 
                       // Level 2 - 2 ResNet blocks
                       ResNetBlock(create_layer_block(
-                          N_CHANNELS * 4, N_CHANNELS * 4, IMG_SIZE - 2)),
+                          N_CHANNELS * 4, N_CHANNELS * 4, IMG_SIZE / 4)),
                       ResNetBlock(create_layer_block(
-                          N_CHANNELS * 4, N_CHANNELS * 4, IMG_SIZE - 2)),
+                          N_CHANNELS * 4, N_CHANNELS * 4, IMG_SIZE / 4)),
 
                       // Level 3
-                      ResNetBlock(LayerBlock(
-                          ReLU(),
-                          LayerNorm(std::vector<int>(
-                              {N_CHANNELS * 4, IMG_SIZE - 2, IMG_SIZE - 2})),
-                          Conv2d(N_CHANNELS * 4, N_CHANNELS * 8, 4, false, 1, 1,
-                                 1),
+                      //   ResNetBlock(LayerBlock(
+                      //       // Downsample
+                      //       ReLU(),
+                      //       LayerNorm(std::vector<int>(
+                      //           {N_CHANNELS * 4, IMG_SIZE / 4, IMG_SIZE /
+                      //           4})),
+                      //       Conv2d(N_CHANNELS * 4, N_CHANNELS * 8, 4, false,
+                      //       2, 1,
+                      //              1),
 
-                          // Level 3 - 2 ResNet blocks
-                          ResNetBlock(create_layer_block(
-                              N_CHANNELS * 8, N_CHANNELS * 8, IMG_SIZE - 3)),
-                          ResNetBlock(create_layer_block(
-                              N_CHANNELS * 8, N_CHANNELS * 8, IMG_SIZE - 3)),
+                      //       // Level 3 - 2 ResNet blocks
+                      //       ResNetBlock(create_layer_block(
+                      //           N_CHANNELS * 8, N_CHANNELS * 8, IMG_SIZE /
+                      //           8)),
+                      //       ResNetBlock(create_layer_block(
+                      //           N_CHANNELS * 8, N_CHANNELS * 8, IMG_SIZE /
+                      //           8)),
 
-                          // Upsample
-                          ReLU(),
-                          LayerNorm(std::vector<int>(
-                              {N_CHANNELS * 8, IMG_SIZE - 3, IMG_SIZE - 3})),
-                          ConvTranspose2d(N_CHANNELS * 8, N_CHANNELS * 4, 4,
-                                          false, 1, 1, 1))),
+                      //       // Middle Block
+                      //       ResNetBlock(create_layer_block(
+                      //           N_CHANNELS * 8, N_CHANNELS * 8, IMG_SIZE /
+                      //           8)),
+                      //       ResNetBlock(create_layer_block(
+                      //           N_CHANNELS * 8, N_CHANNELS * 8, IMG_SIZE /
+                      //           8)),
+
+                      //       // Level 3 - 2 ResNet blocks
+                      //       ResNetBlock(create_layer_block(
+                      //           N_CHANNELS * 8, N_CHANNELS * 8, IMG_SIZE /
+                      //           8)),
+                      //       ResNetBlock(create_layer_block(
+                      //           N_CHANNELS * 8, N_CHANNELS * 8, IMG_SIZE /
+                      //           8)),
+
+                      //       // Upsample
+                      //       ReLU(),
+                      //       LayerNorm(std::vector<int>(
+                      //           {N_CHANNELS * 8, IMG_SIZE / 8, IMG_SIZE /
+                      //           8})),
+                      //       ConvTranspose2d(N_CHANNELS * 8, N_CHANNELS * 4,
+                      //       4,
+                      //                       false, 2, 1, 1))),
+
+                      // Middle Block
+                      ResNetBlock(create_layer_block(
+                          N_CHANNELS * 4, N_CHANNELS * 4, IMG_SIZE / 4)),
+                      ResNetBlock(create_layer_block(
+                          N_CHANNELS * 4, N_CHANNELS * 4, IMG_SIZE / 4)),
 
                       // Level 2 - 2 ResNet blocks
                       ResNetBlock(create_layer_block(
-                          N_CHANNELS * 4, N_CHANNELS * 4, IMG_SIZE - 2)),
+                          N_CHANNELS * 4, N_CHANNELS * 4, IMG_SIZE / 4)),
                       ResNetBlock(create_layer_block(
-                          N_CHANNELS * 4, N_CHANNELS * 4, IMG_SIZE - 2)),
+                          N_CHANNELS * 4, N_CHANNELS * 4, IMG_SIZE / 4)),
 
                       // Upsample
                       ReLU(),
                       LayerNorm(std::vector<int>(
-                          {N_CHANNELS * 4, IMG_SIZE - 2, IMG_SIZE - 2})),
+                          {N_CHANNELS * 4, IMG_SIZE / 4, IMG_SIZE / 4})),
                       ConvTranspose2d(N_CHANNELS * 4, N_CHANNELS * 2, 4, false,
-                                      1, 1, 1))),
+                                      2, 1, 1))),
 
                   // Level 1 - 2 ResNet blocks
                   ResNetBlock(create_layer_block(N_CHANNELS * 2, N_CHANNELS * 2,
-                                                 IMG_SIZE - 1)),
+                                                 IMG_SIZE / 2)),
                   ResNetBlock(create_layer_block(N_CHANNELS * 2, N_CHANNELS * 2,
-                                                 IMG_SIZE - 1)),
+                                                 IMG_SIZE / 2)),
 
                   // Upsample
                   ReLU(),
                   LayerNorm(std::vector<int>(
-                      {N_CHANNELS * 2, IMG_SIZE - 1, IMG_SIZE - 1})),
-                  ConvTranspose2d(N_CHANNELS * 2, N_CHANNELS, 4, true, 1, 1,
+                      {N_CHANNELS * 2, IMG_SIZE / 2, IMG_SIZE / 2})),
+                  ConvTranspose2d(N_CHANNELS * 2, N_CHANNELS, 4, true, 2, 1,
                                   1))),
 
               // Level 0 - 2 ResNet blocks
@@ -601,9 +630,9 @@ class UNetDiffusion : public Module {
                 std::cout << "Mean variance of the output: " << mean_var
                           << std::endl;
 
-                if (i % 10000 == 0 && i > 0) {
-                    generate_samples(i);
-                }
+                // if (i % 10000 == 0 && i > 0) {
+                //     generate_samples(i);
+                // }
             }
 
             std::cout << "Epoch " << epoch << " completed" << std::endl;

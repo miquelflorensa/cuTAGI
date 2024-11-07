@@ -815,35 +815,44 @@ __global__ void relu_mean_var_cuda_vectorized(float const *mu_z,
     }
 }
 
-__global__ void sigmoid_mean_var_cuda(float const *mu_z, float const *var_z,
-                                      int num_states, float *mu_a, float *jcb,
-                                      float *var_a)
-/*
- */
-{
+__global__ void sigmoid_mean_var_cuda(float const *mu_z,   // Input mean
+                                      float const *var_z,  // Input variance
+                                      int num_states,      // Number of states
+                                      float *mu_a,         // Output mean
+                                      float *jcb,          // Jacobian
+                                      float *var_a         // Output variance
+) {
     int col = blockIdx.x * blockDim.x + threadIdx.x;
     float tmp = 0.0f;
-
     if (col < num_states) {
+        // Compute sigmoid mean and variance
         tmp = 1.0f / (1.0f + expf(-mu_z[col]));
-        mu_a[col] = tmp;
-        jcb[col] = tmp * (1.0f - tmp);
-        var_a[col] = tmp * (1.0f - tmp) * var_z[col] * tmp * (1.0f - tmp);
+        float sig_mu = tmp;
+        float sig_derivative = tmp * (1.0f - tmp);
+        float sig_var = tmp * (1.0f - tmp) * var_z[col] * tmp * (1.0f - tmp);
 
-        float cov_x_sigmoid_x = jcb[col] * var_a[col];
+        // Using GMA for mean of product (x * sigmoid(x))
+        // E[X1X2] = μ1μ2 + cov(X1,X2)
+        // For swish, X1 is the input and X2 is sigmoid(X1)
+        // cov(X1,sigmoid(X1)) ≈ var_x * sig_derivative
+        float cov_x_sig = var_z[col] * sig_derivative;
+        mu_a[col] = mu_z[col] * sig_mu + cov_x_sig;
 
-        // mu(X1X2) = μ1 μ2 + cov(X1, X2)
-        mu_a[col] = mu_z[col] * mu_a[col] + cov_x_sigmoid_x;
+        // Compute variance using GMA formula
+        // var(X1X2) = σ1²σ2² + cov(X1,X2)² + 2cov(X1,X2)μ1μ2 + σ1²μ2² + σ2²μ1²
+        var_a[col] = var_z[col] * sig_var +                   // σ1²σ2²
+                     cov_x_sig * cov_x_sig +                  // cov(X1,X2)²
+                     2.0f * cov_x_sig * mu_z[col] * sig_mu +  // 2cov(X1,X2)μ1μ2
+                     var_z[col] * sig_mu * sig_mu +           // σ1²μ2²
+                     sig_var * mu_z[col] * mu_z[col];         // σ2²μ1²
 
-        // var(X1X2) = σ_1^2σ_2^2 + cov(X1, X2)^2 + 2cov(X1, X2)μ_1μ_2 + σ_1^2
-        // μ_2^2 + σ_2^2 μ_1^2
-        var_a[col] = var_z[col] * var_a[col] +
-                     cov_x_sigmoid_x * cov_x_sigmoid_x +
-                     2 * cov_x_sigmoid_x * mu_z[col] * mu_a[col] +
-                     var_z[col] * mu_a[col] * mu_a[col] +
-                     var_a[col] * mu_z[col] * mu_z[col];
+        if (var_a[col] < 0.0f) {
+            var_a[col] = 1e-6f;
+        }
 
-        jcb[col] = mu_a[col] + mu_z[col] * mu_a[col] * (1.0f - mu_a[col]);
+        // Compute Jacobian
+        // d/dx(x*sigmoid(x)) = sigmoid(x) + x*sigmoid(x)*(1-sigmoid(x))
+        jcb[col] = sig_mu + mu_z[col] * sig_mu * (1.0f - sig_mu);
     }
 }
 
