@@ -19,10 +19,6 @@ data/traffic
 data/imagenet
 test_model/
 
-*.png
-*.bin
-
-
 # VSCode
 .vscode
 
