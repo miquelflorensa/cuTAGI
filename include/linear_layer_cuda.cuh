@@ -90,6 +90,8 @@ class LinearCuda : public BaseLayerCuda {
 
     std::unique_ptr<BaseLayer> to_host() override;
 
+    void adjust_params(float scale_mean, float scale_var);
+
    protected:
     using BaseLayerCuda::allocate_param_memory;
     using BaseLayerCuda::params_to_device;

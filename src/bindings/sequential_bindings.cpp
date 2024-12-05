@@ -65,6 +65,45 @@ void bind_sequential(pybind11::module_& m) {
                      self.forward(input_states);
                  }
              })
+        .def(
+            "smart_init",
+            [](Sequential& self, pybind11::array_t<float> mu_x,
+               pybind11::array_t<float> var_x = pybind11::array_t<float>(),
+               float target_mean_var =
+                   1.0f,  // Default value for target_mean_var
+               float target_var_mean =
+                   1.0f  // Default value for target_var_mean
+            ) {
+                // Convert Python arrays to std::vector<float>
+                std::vector<float> mu_x_vec(mu_x.data(),
+                                            mu_x.data() + mu_x.size());
+                std::vector<float> var_x_vec;
+                if (var_x.size() > 0) {
+                    var_x_vec.assign(var_x.data(), var_x.data() + var_x.size());
+                }
+
+                // Call the C++ function
+                self.smart_init(mu_x_vec, var_x_vec, target_mean_var,
+                                target_var_mean);
+            },
+            pybind11::arg("mu_x"),
+            pybind11::arg("var_x") = pybind11::array_t<float>(),
+            pybind11::arg("target_mean_var") = 1.0f,
+            pybind11::arg("target_var_mean") = 1.0f,
+            R"pbdoc(
+        Initializes the Sequential model with smart initialization.
+
+        Parameters:
+        ----------
+        mu_x : numpy.ndarray
+            The mean values of the input.
+        var_x : numpy.ndarray, optional
+            The variance values of the input. Defaults to an empty array.
+        target_mean_var : float, optional
+            Target mean variance. Defaults to 1.0.
+        target_var_mean : float, optional
+            Target variance mean. Defaults to 1.0.
+     )pbdoc")
         .def("backward", &Sequential::backward)
         .def("smoother", &Sequential::smoother)
         .def("step", &Sequential::step)

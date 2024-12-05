@@ -856,6 +856,8 @@ batch-normalization layer applied to full-connected layer.
         }
         delta_mu_w[col] = sum_mu;
         delta_var_w[col] = sum_var;
+        // delta_mu_w[col] = 0.0f;
+        // delta_var_w[col] = 0.0f;
     }
 }
 

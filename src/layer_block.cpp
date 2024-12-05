@@ -4,7 +4,16 @@
 
 #ifdef USE_CUDA
 #include "../include/base_layer_cuda.cuh"
+#include "../include/conv2d_layer_cuda.cuh"
+#include "../include/linear_layer_cuda.cuh"
+#include "../include/resnet_block_cuda.cuh"
 #endif
+
+#include <algorithm>
+#include <cmath>
+#include <iostream>
+#include <string>
+#include <vector>
 
 LayerBlock::~LayerBlock() {}
 
@@ -167,7 +176,150 @@ void LayerBlock::forward(BaseHiddenStates &input_states,
         current_layer->forward(*casted_input_states, *casted_output_states,
                                temp_states);
 
+        bool print_debug = false;
+        if (print_debug) {
+#ifdef USE_CUDA
+            HiddenStateCuda *cu_output_states =
+                dynamic_cast<HiddenStateCuda *>(casted_output_states);
+            cu_output_states->to_host();
+
+            const int num_elements =
+                current_layer->get_output_size() * cu_output_states->block_size;
+
+            float mean_v_pred = 0.0f, mean_s_pred = 0.0f, mean_m_pred = 0.0f,
+                  var_m_pred = 0.0f;
+
+            for (int i = 0; i < num_elements; ++i) {
+                mean_v_pred += cu_output_states->var_a[i];
+                mean_m_pred += cu_output_states->mu_a[i];
+                mean_s_pred += std::sqrt(cu_output_states->var_a[i]);
+            }
+            mean_v_pred /= num_elements;
+            mean_m_pred /= num_elements;
+            mean_s_pred /= num_elements;
+
+            for (int i = 0; i < num_elements; ++i)
+                var_m_pred += (cu_output_states->mu_a[i] - mean_m_pred) *
+                              (cu_output_states->mu_a[i] - mean_m_pred);
+            var_m_pred /= num_elements;
+
+            std::cout << "Layer: " << current_layer->get_layer_name()
+                      << std::endl;
+            std::cout << "Prior predictive -> E[v_pred] = " << mean_v_pred
+                      << " | E[s_pred] = " << mean_s_pred << std::endl;
+            std::cout << "                 -> V[m_pred] = " << var_m_pred
+                      << " | s[m_pred] = " << std::sqrt(var_m_pred)
+                      << std::endl;
+#endif
+        }
+
         std::swap(casted_input_states, casted_output_states);
+    }
+
+    // Ensure output states contains the output of the last layer in the block
+    if (num_layers % 2 == 0) {
+        output_states.swap(input_states);
+    }
+
+    output_states.width = this->out_width;
+    output_states.height = this->out_height;
+    output_states.depth = this->out_channels;
+    output_states.block_size = batch_size;
+    output_states.actual_size = this->output_size;
+}
+
+void LayerBlock::smart_init(BaseHiddenStates &input_states,
+                            BaseHiddenStates &output_states,
+                            BaseTempStates &temp_states, float target_mean_var,
+                            float target_var_mean)
+/*
+ */
+{
+    // Cast input and outputs objects to pointers for  an efficient loop
+    // swapping. It avoids swapping each members in their objects
+    BaseHiddenStates *casted_input_states =
+        dynamic_cast<BaseHiddenStates *>(&input_states);
+    BaseHiddenStates *casted_output_states =
+        dynamic_cast<BaseHiddenStates *>(&output_states);
+
+    // Forward pass for all layers
+    int batch_size = input_states.block_size;
+    int num_layers = this->layers.size();
+
+    for (int i = 0; i < num_layers; ++i) {
+        auto *current_layer = this->layers[i].get();
+
+        float scale_mean = 0.8f;
+        float scale_var = 0.8f;
+
+        if (current_layer->get_layer_type() == LayerType::ResNetBlock) {
+            ResNetBlockCuda *cu_layer =
+                dynamic_cast<ResNetBlockCuda *>(current_layer);
+            cu_layer->smart_init(*casted_input_states, *casted_output_states,
+                                 temp_states, target_mean_var, target_var_mean);
+        } else {
+            // Bisection method to adjust the parameters
+            for (int i = 0; i < 50; i++) {
+                current_layer->forward(*casted_input_states,
+                                       *casted_output_states, temp_states);
+
+                HiddenStateCuda *cu_output_states =
+                    dynamic_cast<HiddenStateCuda *>(casted_output_states);
+                cu_output_states->to_host();
+
+                const int num_elements = current_layer->get_output_size() *
+                                         cu_output_states->block_size;
+
+                float mean_v_pred = 0.0f, mean_m_pred = 0.0f, var_m_pred = 0.0f;
+
+                // Compute mean and variance of predictions
+                for (int i = 0; i < num_elements; ++i) {
+                    mean_v_pred += cu_output_states->var_a[i];
+                    mean_m_pred += cu_output_states->mu_a[i];
+                }
+                mean_v_pred /= num_elements;
+                mean_m_pred /= num_elements;
+
+                for (int i = 0; i < num_elements; ++i) {
+                    var_m_pred += (cu_output_states->mu_a[i] - mean_m_pred) *
+                                  (cu_output_states->mu_a[i] - mean_m_pred);
+                }
+                var_m_pred /= num_elements;
+
+                // Set the new scale_mean in the layer
+                if (current_layer->get_layer_type() == LayerType::Linear) {
+                    LinearCuda *cu_layer =
+                        dynamic_cast<LinearCuda *>(current_layer);
+                    cu_layer->adjust_params(scale_mean, scale_var);
+                } else if (current_layer->get_layer_type() ==
+                           LayerType::Conv2d) {
+                    Conv2dCuda *cu_layer =
+                        dynamic_cast<Conv2dCuda *>(current_layer);
+                    cu_layer->adjust_params(scale_mean, scale_var);
+                }
+
+                if (scale_mean > 1.0f) {
+                    scale_mean = 1.0f / scale_mean;
+                }
+                scale_mean += 0.2f / 50.0f;
+
+                if (scale_var > 1.0f) {
+                    scale_var = 1.0f / scale_var;
+                }
+                scale_var += 0.2f / 50.0f;
+
+                if (var_m_pred <= target_mean_var) {
+                    scale_mean = 1.0f / scale_mean;
+                }
+
+                if (mean_v_pred <= target_var_mean) {
+                    scale_var = 1.0f / scale_var;
+                }
+            }
+
+            // Swap the pointer holding class
+            std::swap(casted_input_states, casted_output_states);
+        }
     }
 
     // Ensure output states contains the output of the last layer in the block

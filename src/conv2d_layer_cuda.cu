@@ -544,3 +544,20 @@ void Conv2dCuda::preinit_layer() {
         this->lazy_index_init();
     }
 }
+
+void Conv2dCuda::adjust_params(float scale_mean, float scale_var) {
+    this->to_host();
+
+    // Adjust weights
+    for (size_t i = 0; i < this->mu_w.size(); i++) {
+        this->mu_w[i] *= scale_mean;
+        // this->var_w[i] *= scale_var;
+    }
+
+    for (size_t i = 0; i < this->mu_b.size(); i++) {
+        this->mu_b[i] *= scale_mean;
+        // this->var_b[i] *= scale_var;
+    }
+
+    this->params_to_device();
+}

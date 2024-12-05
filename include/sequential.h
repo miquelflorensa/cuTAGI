@@ -96,6 +96,10 @@ class Sequential {
     void forward(const std::vector<float>& mu_a,
                  const std::vector<float>& var_a = std::vector<float>());
 
+    void smart_init(const std::vector<float>& mu_x,
+                    const std::vector<float>& var_x = std::vector<float>(),
+                    float target_mean_var = 1.0f, float target_var_mean = 1.0f);
+
     void forward(BaseHiddenStates& input_states);
 
     void backward();

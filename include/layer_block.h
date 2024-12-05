@@ -73,6 +73,11 @@ class LayerBlock : public BaseLayer {
                  BaseHiddenStates &output_states,
                  BaseTempStates &temp_states) override;
 
+    void smart_init(BaseHiddenStates &input_states,
+                    BaseHiddenStates &output_states,
+                    BaseTempStates &temp_states, float target_mean_var,
+                    float target_var_mean);
+
     void backward(BaseDeltaStates &input_delta_states,
                   BaseDeltaStates &output_delta_states,
                   BaseTempStates &temp_states,

@@ -7,8 +7,16 @@
 #include "../include/pooling_layer.h"
 #ifdef USE_CUDA
 #include "../include/base_layer_cuda.cuh"
+#include "../include/conv2d_layer_cuda.cuh"
+#include "../include/linear_layer_cuda.cuh"
+#include "../include/resnet_block_cuda.cuh"
 #endif
+#include <algorithm>
+#include <cmath>
+#include <iostream>
 #include <memory>
+#include <string>
+#include <vector>
 
 // Sequential::Sequential() {}
 Sequential::~Sequential() { this->valid_ = false; }
@@ -277,12 +285,204 @@ void Sequential::forward(const std::vector<float> &mu_x,
         current_layer->forward(*this->input_z_buffer, *this->output_z_buffer,
                                *this->temp_states);
 
+        bool print_debug = false;
+        if (print_debug) {
+#ifdef USE_CUDA
+            HiddenStateCuda *cu_output_states =
+                dynamic_cast<HiddenStateCuda *>(this->output_z_buffer.get());
+            cu_output_states->to_host();
+
+            const int num_elements =
+                current_layer->get_output_size() * cu_output_states->block_size;
+
+            float mean_v_pred = 0.0f, mean_s_pred = 0.0f, mean_m_pred = 0.0f,
+                  var_m_pred = 0.0f;
+
+            for (int i = 0; i < num_elements; ++i) {
+                mean_v_pred += cu_output_states->var_a[i];
+                mean_m_pred += cu_output_states->mu_a[i];
+                mean_s_pred += std::sqrt(cu_output_states->var_a[i]);
+            }
+            mean_v_pred /= num_elements;
+            mean_m_pred /= num_elements;
+            mean_s_pred /= num_elements;
+
+            for (int i = 0; i < num_elements; ++i)
+                var_m_pred += (cu_output_states->mu_a[i] - mean_m_pred) *
+                              (cu_output_states->mu_a[i] - mean_m_pred);
+            var_m_pred /= num_elements;
+
+            std::cout << "Layer: " << current_layer->get_layer_name()
+                      << std::endl;
+            std::cout << "Prior predictive -> E[v_pred] = " << mean_v_pred
+                      << " | E[s_pred] = " << mean_s_pred << std::endl;
+            std::cout << "                 -> V[m_pred] = " << var_m_pred
+                      << " | s[m_pred] = " << std::sqrt(var_m_pred)
+                      << std::endl;
+
+            // Standardize mean and variance so we have V[m_pred] ~ 1
+            // float scale_factor = 1.0f / std::sqrt(var_m_pred);
+            // for (int i = 0; i < num_elements; ++i) {
+            //     cu_output_states->mu_a[i] =
+            //         (cu_output_states->mu_a[i] - mean_m_pred) * scale_factor;
+            //     cu_output_states->var_a[i] *= scale_factor * scale_factor;
+            // }
+
+            // std::cout << "After standardization -> V[m_pred] = " << 1.0f
+            //           << " (approx)" << std::endl;
+
+            // // cu_output_states to device
+            // cu_output_states->chunks_to_device(this->output_z_buffer->size);
+
+#endif
+        }
+
         // Swap the pointer holding class
         std::swap(this->input_z_buffer, this->output_z_buffer);
     }
 
     // Output buffer is considered as the final output of network
     std::swap(this->output_z_buffer, this->input_z_buffer);
+}
+
+void Sequential::smart_init(const std::vector<float> &mu_x,
+                            const std::vector<float> &var_x,
+                            float target_mean_var, float target_var_mean)
+/*
+ */
+{
+    // Batch size: TODO: this is only correct if input size is correctly set
+    int input_size = this->layers.front()->get_input_size();
+    if (mu_x.size() % input_size != 0) {
+        std::string message =
+            "Input size mismatch: " + std::to_string(input_size) + " vs " +
+            std::to_string(mu_x.size());
+        LOG(LogLevel::ERROR, message);
+    }
+    int batch_size = mu_x.size() / input_size;
+
+    // Lazy initialization
+    if (this->z_buffer_block_size == 0) {
+        this->z_buffer_block_size = batch_size;
+        this->z_buffer_size = batch_size * this->z_buffer_size;
+
+        init_output_state_buffer();
+        if (this->training) {
+            init_delta_state_buffer();
+        }
+    }
+
+    // Reallocate the buffer if batch size changes
+    if (batch_size != this->z_buffer_block_size) {
+        this->z_buffer_size =
+            batch_size * (this->z_buffer_size / this->z_buffer_block_size);
+        this->z_buffer_block_size = batch_size;
+
+        this->input_z_buffer->set_size(this->z_buffer_size, batch_size);
+        if (this->training) {
+            this->input_delta_z_buffer->set_size(this->z_buffer_size,
+                                                 batch_size);
+            this->output_delta_z_buffer->set_size(this->z_buffer_size,
+                                                  batch_size);
+        }
+    }
+
+    // Merge input data to the input buffer
+    this->input_z_buffer->set_input_x(mu_x, var_x, batch_size);
+
+    // Forward pass for all layers
+    for (auto &layer : this->layers) {
+        auto *current_layer = layer.get();
+
+        float scale_mean = 0.8f;
+        float scale_var = 0.8f;
+
+        if (current_layer->get_layer_type() == LayerType::ResNetBlock) {
+            ResNetBlockCuda *cu_layer =
+                dynamic_cast<ResNetBlockCuda *>(current_layer);
+            cu_layer->smart_init(*this->input_z_buffer, *this->output_z_buffer,
+                                 *this->temp_states, target_mean_var,
+                                 target_var_mean);
+        } else {
+            // Bisection method to adjust the parameters
+            for (int i = 0; i < 50; i++) {
+                current_layer->forward(*this->input_z_buffer,
+                                       *this->output_z_buffer,
+                                       *this->temp_states);
+
+                HiddenStateCuda *cu_output_states =
+                    dynamic_cast<HiddenStateCuda *>(
+                        this->output_z_buffer.get());
+                cu_output_states->to_host();
+
+                const int num_elements = current_layer->get_output_size() *
+                                         cu_output_states->block_size;
+
+                float mean_v_pred = 0.0f, mean_m_pred = 0.0f, var_m_pred = 0.0f;
+
+                // Compute mean and variance of predictions
+                for (int i = 0; i < num_elements; ++i) {
+                    mean_v_pred += cu_output_states->var_a[i];
+                    mean_m_pred += cu_output_states->mu_a[i];
+                }
+                mean_v_pred /= num_elements;
+                mean_m_pred /= num_elements;
+
+                for (int i = 0; i < num_elements; ++i) {
+                    var_m_pred += (cu_output_states->mu_a[i] - mean_m_pred) *
+                                  (cu_output_states->mu_a[i] - mean_m_pred);
+                }
+                var_m_pred /= num_elements;
+
+                // std::cout << "Iteration: " << i << std::endl;
+                // std::cout << "Layer: " << current_layer->get_layer_name()
+                //           << std::endl;
+                // std::cout << "Prior predictive -> E[v_pred] = " <<
+                // mean_v_pred
+                //           << std::endl;
+                // std::cout << "                 -> V[m_pred] = " << var_m_pred
+                //           << std::endl;
+
+                // Set the new scale_mean in the layer
+                if (current_layer->get_layer_type() == LayerType::Linear) {
+                    LinearCuda *cu_layer =
+                        dynamic_cast<LinearCuda *>(current_layer);
+                    cu_layer->adjust_params(scale_mean, scale_var);
+                } else if (current_layer->get_layer_type() ==
+                           LayerType::Conv2d) {
+                    Conv2dCuda *cu_layer =
+                        dynamic_cast<Conv2dCuda *>(current_layer);
+                    cu_layer->adjust_params(scale_mean, scale_var);
+                }
+
+                if (scale_mean > 1.0f) {
+                    scale_mean = 1.0f / scale_mean;
+                }
+                scale_mean += 0.2f / 50.0f;
+
+                if (scale_var > 1.0f) {
+                    scale_var = 1.0f / scale_var;
+                }
+                scale_var += 0.2f / 50.0f;
+
+                if (var_m_pred <= target_mean_var) {
+                    scale_mean = 1.0f / scale_mean;
+                }
+
+                if (mean_v_pred <= target_var_mean) {
+                    scale_var = 1.0f / scale_var;
+                }
+            }
+
+            // Swap the pointer holding class
+            std::swap(this->input_z_buffer, this->output_z_buffer);
+        }
+    }
+
+    // Output buffer is considered as the final output of network
+    std::swap(this->output_z_buffer, this->input_z_buffer);
+
+    std::cout << "Smart init done" << std::endl;
 }
 
 void Sequential::forward(BaseHiddenStates &input_states)
@@ -600,9 +800,9 @@ Sequential::get_state_dict()
 /*
  */
 {
-    // Send the parameters to the host. TODO: for further speedup, we must to
-    // avoid this step. One could use the copy data in gpu memory directly or
-    // unified memory
+    // Send the parameters to the host. TODO: for further speedup, we must
+    // to avoid this step. One could use the copy data in gpu memory
+    // directly or unified memory
     if (this->device.compare("cuda") == 0) {
         this->params_to_host();
     }
@@ -614,12 +814,19 @@ Sequential::get_state_dict()
     for (size_t i = 0; i < this->layers.size(); ++i) {
         const auto &layer = this->layers[i];
         if (layer->get_layer_type() != LayerType::Activation &&
-            layer->get_layer_type() != LayerType::Pool2d) {
+            layer->get_layer_type() != LayerType::Pool2d &&
+            layer->get_layer_type() != LayerType::ResNetBlock) {
             std::string layer_name =
                 layer->get_layer_info() + "_" + std::to_string(i);
             state_dict[layer_name] = std::make_tuple(layer->mu_w, layer->var_w,
                                                      layer->mu_b, layer->var_b);
         }
+        // else if (layer->get_layer_type() == LayerType::ResNetBlock) {
+        //     auto resnet_block = dynamic_cast<ResNetBlock *>(layer.get());
+        //     auto block_state_dict = resnet_block->get_state_dict();
+        //     state_dict.insert(block_state_dict.begin(),
+        //     block_state_dict.end());
+        // }
     }
     return state_dict;
 }
@@ -669,9 +876,9 @@ void Sequential::load_state_dict(
         }
     }
 
-    // Send the parameters to the device. TODO: for further speedup, we must to
-    // avoid this step. One could use the copy data in gpu memory directly or
-    // unified memory
+    // Send the parameters to the device. TODO: for further speedup, we must
+    // to avoid this step. One could use the copy data in gpu memory
+    // directly or unified memory
     if (this->device.compare("cuda") == 0) {
         this->params_to_device();
     }

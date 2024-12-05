@@ -141,6 +141,27 @@ class Sequential:
 
         return self.get_outputs()
 
+    def smart_init(
+        self,
+        mu_x: np.ndarray,
+        var_x: None,
+        target_mean_var: float = 1.0,
+        target_var_mean: float = 1.0,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Smart parameter initialization with adjustable target mean and variance.
+
+        Args:
+            mu_x (np.ndarray): Mean of the input.
+            var_x (Optional[np.ndarray]): Variance of the input. Defaults to None.
+            target_mean_var (float): Target mean of the predicted variance. Defaults to 1.0.
+            target_var_mean (float): Target variance of the predicted mean. Defaults to 1.0.
+        """
+        if var_x is None:
+            var_x = np.zeros_like(mu_x)
+
+        self._cpp_backend.smart_init(mu_x, var_x, target_mean_var, target_var_mean)
+
     def backward(self):
         """Perform a backward pass."""
         self._cpp_backend.backward()

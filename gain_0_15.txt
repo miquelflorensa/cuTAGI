@@ -1,0 +1,253 @@
+Training with gain = 0.15
+Training with initial variance mean: 0.01
+Files already downloaded and verified
+Files already downloaded and verified
+Training Progress:   0%|          | 0/10 [00:00<?, ?it/s]Smart init done
+Prior predictive -> E[v_pred] =  3.326438 +- 0.42378357
+Epoch 1/10 | training error: 59.25% | test error: 55.75
+%:  10%|█         | 1/10 [04:32<40:50, 272.23s/it]Epoch 2/10 | training error: 50.72% | test error: 49.56
+%:  20%|██        | 2/10 [07:59<31:12, 234.11s/it]Epoch 3/10 | training error: 45.63% | test error: 46.17
+%:  30%|███       | 3/10 [11:27<25:53, 221.90s/it]Epoch 4/10 | training error: 42.55% | test error: 41.29
+%:  40%|████      | 4/10 [14:54<21:37, 216.22s/it]Epoch 5/10 | training error: 38.39% | test error: 38.85
+%:  50%|█████     | 5/10 [18:21<17:45, 213.06s/it]Epoch 6/10 | training error: 37.67% | test error: 37.59
+%:  60%|██████    | 6/10 [21:49<14:04, 211.16s/it]Epoch 7/10 | training error: 42.41% | test error: 41.67
+%:  70%|███████   | 7/10 [25:17<10:30, 210.05s/it]Epoch 8/10 | training error: 31.07% | test error: 30.75
+%:  80%|████████  | 8/10 [28:45<06:58, 209.33s/it]Epoch 9/10 | training error: 24.09% | test error: 24.21
+%:  90%|█████████ | 9/10 [32:12<03:28, 208.83s/it]Epoch 10/10 | training error: 21.35% | test error: 22.82
+%: 100%|██████████| 10/10 [35:40<00:00, 208.44s/it]Epoch 10/10 | training error: 21.35% | test error: 22.82
+%: 100%|██████████| 10/10 [35:40<00:00, 214.03s/it]
+Training complete.
+Training with initial variance mean: 0.05
+Files already downloaded and verified
+Files already downloaded and verified
+Training Progress:   0%|          | 0/10 [00:00<?, ?it/s]Smart init done
+Prior predictive -> E[v_pred] =  3.7442183 +- 0.46197748
+Epoch 1/10 | training error: 57.51% | test error: 54.76
+%:  10%|█         | 1/10 [04:35<41:18, 275.40s/it]Epoch 2/10 | training error: 51.25% | test error: 48.93
+%:  20%|██        | 2/10 [08:03<31:24, 235.60s/it]Epoch 3/10 | training error: 44.89% | test error: 43.95
+%:  30%|███       | 3/10 [11:30<26:00, 222.89s/it]Epoch 4/10 | training error: 40.67% | test error: 40.79
+%:  40%|████      | 4/10 [14:58<21:41, 216.86s/it]Epoch 5/10 | training error: 37.19% | test error: 36.27
+%:  50%|█████     | 5/10 [18:26<17:48, 213.60s/it]Epoch 6/10 | training error: 34.03% | test error: 32.94
+%:  60%|██████    | 6/10 [21:54<14:06, 211.61s/it]Epoch 7/10 | training error: 30.93% | test error: 30.32
+%:  70%|███████   | 7/10 [25:22<10:31, 210.41s/it]Epoch 8/10 | training error: 28.92% | test error: 30.42
+%:  80%|████████  | 8/10 [28:49<06:59, 209.58s/it]Epoch 9/10 | training error: 26.68% | test error: 27.39
+%:  90%|█████████ | 9/10 [32:17<03:29, 209.05s/it]Epoch 10/10 | training error: 24.24% | test error: 25.65
+%: 100%|██████████| 10/10 [35:45<00:00, 208.66s/it]Epoch 10/10 | training error: 24.24% | test error: 25.65
+%: 100%|██████████| 10/10 [35:45<00:00, 214.55s/it]
+Training complete.
+Training with initial variance mean: 0.1
+Files already downloaded and verified
+Files already downloaded and verified
+Training Progress:   0%|          | 0/10 [00:00<?, ?it/s]Smart init done
+Prior predictive -> E[v_pred] =  2.621846 +- 0.38128135
+Epoch 1/10 | training error: 57.51% | test error: 54.80
+%:  10%|█         | 1/10 [04:33<41:02, 273.60s/it]Epoch 2/10 | training error: 51.20% | test error: 50.20
+%:  20%|██        | 2/10 [07:58<31:05, 233.19s/it]Epoch 3/10 | training error: 44.04% | test error: 43.45
+%:  30%|███       | 3/10 [11:23<25:43, 220.52s/it]Epoch 4/10 | training error: 40.87% | test error: 40.21
+%:  40%|████      | 4/10 [14:51<21:33, 215.51s/it]Epoch 5/10 | training error: 37.61% | test error: 36.14
+%:  50%|█████     | 5/10 [18:19<17:43, 212.73s/it]Epoch 6/10 | training error: 33.74% | test error: 33.26
+%:  60%|██████    | 6/10 [21:47<14:04, 211.04s/it]Epoch 7/10 | training error: 30.74% | test error: 30.67
+%:  70%|███████   | 7/10 [25:15<10:29, 209.97s/it]Epoch 8/10 | training error: 28.91% | test error: 28.62
+%:  80%|████████  | 8/10 [28:42<06:58, 209.14s/it]Epoch 9/10 | training error: 26.29% | test error: 28.15
+%:  90%|█████████ | 9/10 [32:07<03:27, 207.80s/it]Epoch 10/10 | training error: 25.59% | test error: 25.37
+%: 100%|██████████| 10/10 [35:32<00:00, 206.89s/it]Epoch 10/10 | training error: 25.59% | test error: 25.37
+%: 100%|██████████| 10/10 [35:32<00:00, 213.22s/it]
+Training complete.
+Training with initial variance mean: 0.2
+Files already downloaded and verified
+Files already downloaded and verified
+Training Progress:   0%|          | 0/10 [00:00<?, ?it/s]Smart init done
+Prior predictive -> E[v_pred] =  1.6356009 +- 0.26165754
+Epoch 1/10 | training error: 58.06% | test error: 56.47
+%:  10%|█         | 1/10 [04:15<38:21, 255.69s/it]Epoch 2/10 | training error: 52.75% | test error: 50.84
+%:  20%|██        | 2/10 [07:40<30:06, 225.84s/it]Epoch 3/10 | training error: 47.65% | test error: 46.75
+%:  30%|███       | 3/10 [11:05<25:13, 216.28s/it]Epoch 4/10 | training error: 44.24% | test error: 41.19
+%:  40%|████      | 4/10 [14:30<21:10, 211.72s/it]Epoch 5/10 | training error: 39.97% | test error: 37.40
+%:  50%|█████     | 5/10 [17:55<17:26, 209.24s/it]Epoch 6/10 | training error: 34.94% | test error: 33.97
+%:  60%|██████    | 6/10 [21:19<13:50, 207.73s/it]Epoch 7/10 | training error: 30.49% | test error: 30.70
+%:  70%|███████   | 7/10 [24:44<10:20, 206.76s/it]Epoch 8/10 | training error: 24.85% | test error: 25.63
+%:  80%|████████  | 8/10 [28:09<06:52, 206.15s/it]Epoch 9/10 | training error: 21.07% | test error: 23.51
+%:  90%|█████████ | 9/10 [31:34<03:25, 205.72s/it]Epoch 10/10 | training error: 18.30% | test error: 19.57
+%: 100%|██████████| 10/10 [34:59<00:00, 205.45s/it]Epoch 10/10 | training error: 18.30% | test error: 19.57
+%: 100%|██████████| 10/10 [34:59<00:00, 209.91s/it]
+Training complete.
+Training with initial variance mean: 0.3
+Files already downloaded and verified
+Files already downloaded and verified
+Training Progress:   0%|          | 0/10 [00:00<?, ?it/s]Smart init done
+Prior predictive -> E[v_pred] =  1.2636362 +- 0.2171791
+Epoch 1/10 | training error: 62.44% | test error: 59.26
+%:  10%|█         | 1/10 [04:15<38:19, 255.47s/it]Epoch 2/10 | training error: 58.48% | test error: 57.19
+%:  20%|██        | 2/10 [07:40<30:05, 225.68s/it]Epoch 3/10 | training error: 46.33% | test error: 43.62
+%:  30%|███       | 3/10 [11:05<25:13, 216.16s/it]Epoch 4/10 | training error: 33.98% | test error: 32.92
+%:  40%|████      | 4/10 [14:29<21:10, 211.69s/it]Epoch 5/10 | training error: 25.77% | test error: 26.19
+%:  50%|█████     | 5/10 [17:54<17:26, 209.21s/it]Epoch 6/10 | training error: 21.26% | test error: 22.23
+%:  60%|██████    | 6/10 [21:19<13:50, 207.73s/it]Epoch 7/10 | training error: 19.63% | test error: 20.01
+%:  70%|███████   | 7/10 [24:44<10:20, 206.79s/it]Epoch 8/10 | training error: 17.71% | test error: 19.23
+%:  80%|████████  | 8/10 [28:09<06:52, 206.17s/it]Epoch 9/10 | training error: 16.09% | test error: 18.07
+%:  90%|█████████ | 9/10 [31:34<03:25, 205.72s/it]Epoch 10/10 | training error: 13.36% | test error: 17.67
+%: 100%|██████████| 10/10 [34:58<00:00, 205.42s/it]Epoch 10/10 | training error: 13.36% | test error: 17.67
+%: 100%|██████████| 10/10 [34:58<00:00, 209.88s/it]
+Training complete.
+Training with initial variance mean: 0.4
+Files already downloaded and verified
+Files already downloaded and verified
+Training Progress:   0%|          | 0/10 [00:00<?, ?it/s]Smart init done
+Prior predictive -> E[v_pred] =  1.1300219 +- 0.1806618
+Epoch 1/10 | training error: 66.43% | test error: 61.80
+%:  10%|█         | 1/10 [04:15<38:16, 255.13s/it]Epoch 2/10 | training error: 53.98% | test error: 51.06
+%:  20%|██        | 2/10 [07:39<30:03, 225.48s/it]Epoch 3/10 | training error: 38.66% | test error: 37.72
+%:  30%|███       | 3/10 [11:04<25:11, 215.99s/it]Epoch 4/10 | training error: 29.88% | test error: 30.50
+%:  40%|████      | 4/10 [14:29<21:09, 211.55s/it]Epoch 5/10 | training error: 24.67% | test error: 24.50
+%:  50%|█████     | 5/10 [17:53<17:25, 209.08s/it]Epoch 6/10 | training error: 21.18% | test error: 23.13
+%:  60%|██████    | 6/10 [21:18<13:50, 207.60s/it]Epoch 7/10 | training error: 19.02% | test error: 21.18
+%:  70%|███████   | 7/10 [24:44<10:20, 206.86s/it]Epoch 8/10 | training error: 16.85% | test error: 19.73
+%:  80%|████████  | 8/10 [28:11<06:54, 207.17s/it]Epoch 9/10 | training error: 16.10% | test error: 19.59
+%:  90%|█████████ | 9/10 [31:39<03:27, 207.29s/it]Epoch 10/10 | training error: 14.81% | test error: 17.91
+%: 100%|██████████| 10/10 [35:08<00:00, 207.70s/it]Epoch 10/10 | training error: 14.81% | test error: 17.91
+%: 100%|██████████| 10/10 [35:08<00:00, 210.81s/it]
+Training complete.
+Training with initial variance mean: 0.5
+Files already downloaded and verified
+Files already downloaded and verified
+Training Progress:   0%|          | 0/10 [00:00<?, ?it/s]Smart init done
+Prior predictive -> E[v_pred] =  0.9768141 +- 0.15755314
+Epoch 1/10 | training error: 67.68% | test error: 60.89
+%:  10%|█         | 1/10 [04:39<41:54, 279.43s/it]Epoch 2/10 | training error: 52.05% | test error: 47.44
+%:  20%|██        | 2/10 [08:08<31:42, 237.76s/it]Epoch 3/10 | training error: 36.70% | test error: 34.55
+%:  30%|███       | 3/10 [11:36<26:11, 224.46s/it]Epoch 4/10 | training error: 28.95% | test error: 31.50
+%:  40%|████      | 4/10 [15:05<21:49, 218.20s/it]Epoch 5/10 | training error: 24.86% | test error: 24.89
+%:  50%|█████     | 5/10 [18:33<17:53, 214.76s/it]Epoch 6/10 | training error: 21.46% | test error: 23.27
+%:  60%|██████    | 6/10 [22:02<14:10, 212.69s/it]Epoch 7/10 | training error: 18.91% | test error: 21.42
+%:  70%|███████   | 7/10 [25:31<10:34, 211.37s/it]Epoch 8/10 | training error: 17.18% | test error: 19.58
+%:  80%|████████  | 8/10 [28:59<07:01, 210.51s/it]Epoch 9/10 | training error: 16.08% | test error: 19.43
+%:  90%|█████████ | 9/10 [32:28<03:29, 209.94s/it]Epoch 10/10 | training error: 15.67% | test error: 17.82
+%: 100%|██████████| 10/10 [35:57<00:00, 209.57s/it]Epoch 10/10 | training error: 15.67% | test error: 17.82
+%: 100%|██████████| 10/10 [35:57<00:00, 215.74s/it]
+Training complete.
+Training with initial variance mean: 0.6
+Files already downloaded and verified
+Files already downloaded and verified
+Training Progress:   0%|          | 0/10 [00:00<?, ?it/s]Smart init done
+Prior predictive -> E[v_pred] =  0.9073765 +- 0.15163827
+Epoch 1/10 | training error: 69.30% | test error: 64.66
+%:  10%|█         | 1/10 [04:36<41:31, 276.83s/it]Epoch 2/10 | training error: 50.52% | test error: 46.52
+%:  20%|██        | 2/10 [08:05<31:33, 236.74s/it]Epoch 3/10 | training error: 36.44% | test error: 36.57
+%:  30%|███       | 3/10 [11:34<26:07, 223.91s/it]Epoch 4/10 | training error: 29.47% | test error: 30.96
+%:  40%|████      | 4/10 [15:02<21:47, 217.93s/it]Epoch 5/10 | training error: 24.23% | test error: 26.00
+%:  50%|█████     | 5/10 [18:31<17:53, 214.65s/it]Epoch 6/10 | training error: 21.39% | test error: 23.36
+%:  60%|██████    | 6/10 [22:00<14:10, 212.63s/it]Epoch 7/10 | training error: 19.96% | test error: 22.40
+%:  70%|███████   | 7/10 [25:29<10:33, 211.32s/it]Epoch 8/10 | training error: 18.35% | test error: 19.92
+%:  80%|████████  | 8/10 [28:55<06:59, 209.76s/it]Epoch 9/10 | training error: 16.30% | test error: 19.59
+%:  90%|█████████ | 9/10 [32:24<03:29, 209.40s/it]Epoch 10/10 | training error: 15.58% | test error: 19.70
+%: 100%|██████████| 10/10 [35:52<00:00, 209.18s/it]Epoch 10/10 | training error: 15.58% | test error: 19.70
+%: 100%|██████████| 10/10 [35:52<00:00, 215.28s/it]
+Training complete.
+Training with initial variance mean: 0.7
+Files already downloaded and verified
+Files already downloaded and verified
+Training Progress:   0%|          | 0/10 [00:00<?, ?it/s]Smart init done
+Prior predictive -> E[v_pred] =  0.8691389 +- 0.16128336
+Epoch 1/10 | training error: 67.78% | test error: 60.53
+%:  10%|█         | 1/10 [04:39<41:58, 279.81s/it]Epoch 2/10 | training error: 48.12% | test error: 46.90
+%:  20%|██        | 2/10 [08:08<31:43, 237.93s/it]Epoch 3/10 | training error: 36.24% | test error: 36.44
+%:  30%|███       | 3/10 [11:37<26:11, 224.53s/it]Epoch 4/10 | training error: 28.88% | test error: 29.69
+%:  40%|████      | 4/10 [15:05<21:49, 218.28s/it]Epoch 5/10 | training error: 24.73% | test error: 26.80
+%:  50%|█████     | 5/10 [18:34<17:54, 214.82s/it]Epoch 6/10 | training error: 22.28% | test error: 22.81
+%:  60%|██████    | 6/10 [22:03<14:10, 212.73s/it]Epoch 7/10 | training error: 19.79% | test error: 22.59
+%:  70%|███████   | 7/10 [25:31<10:34, 211.41s/it]Epoch 8/10 | training error: 18.54% | test error: 20.44
+%:  80%|████████  | 8/10 [29:00<07:01, 210.53s/it]Epoch 9/10 | training error: 16.28% | test error: 20.15
+%:  90%|█████████ | 9/10 [32:28<03:29, 209.91s/it]Epoch 10/10 | training error: 15.11% | test error: 18.73
+%: 100%|██████████| 10/10 [35:57<00:00, 209.53s/it]Epoch 10/10 | training error: 15.11% | test error: 18.73
+%: 100%|██████████| 10/10 [35:57<00:00, 215.76s/it]
+Training complete.
+Training with initial variance mean: 0.8
+Files already downloaded and verified
+Files already downloaded and verified
+Training Progress:   0%|          | 0/10 [00:00<?, ?it/s]Smart init done
+Prior predictive -> E[v_pred] =  0.79775965 +- 0.1389408
+Epoch 1/10 | training error: 67.91% | test error: 63.37
+%:  10%|█         | 1/10 [04:39<41:51, 279.09s/it]Epoch 2/10 | training error: 48.00% | test error: 45.11
+%:  20%|██        | 2/10 [08:07<31:41, 237.64s/it]Epoch 3/10 | training error: 36.14% | test error: 34.52
+%:  30%|███       | 3/10 [11:33<26:01, 223.09s/it]Epoch 4/10 | training error: 28.21% | test error: 28.93
+%:  40%|████      | 4/10 [15:02<21:44, 217.37s/it]Epoch 5/10 | training error: 24.16% | test error: 26.35
+%:  50%|█████     | 5/10 [18:30<17:51, 214.27s/it]Epoch 6/10 | training error: 21.84% | test error: 24.14
+%:  60%|██████    | 6/10 [21:59<14:09, 212.43s/it]Epoch 7/10 | training error: 20.29% | test error: 21.98
+%:  70%|███████   | 7/10 [25:28<10:33, 211.19s/it]Epoch 8/10 | training error: 18.28% | test error: 21.63
+%:  80%|████████  | 8/10 [28:57<07:00, 210.40s/it]Epoch 9/10 | training error: 16.75% | test error: 21.08
+%:  90%|█████████ | 9/10 [32:25<03:29, 209.85s/it]Epoch 10/10 | training error: 15.49% | test error: 19.19
+%: 100%|██████████| 10/10 [35:54<00:00, 209.48s/it]Epoch 10/10 | training error: 15.49% | test error: 19.19
+%: 100%|██████████| 10/10 [35:54<00:00, 215.43s/it]
+Training complete.
+Training with initial variance mean: 0.9
+Files already downloaded and verified
+Files already downloaded and verified
+Training Progress:   0%|          | 0/10 [00:00<?, ?it/s]Smart init done
+Prior predictive -> E[v_pred] =  0.79930776 +- 0.13391182
+Epoch 1/10 | training error: 67.73% | test error: 62.99
+%:  10%|█         | 1/10 [04:39<41:53, 279.27s/it]Epoch 2/10 | training error: 49.04% | test error: 46.52
+%:  20%|██        | 2/10 [08:08<31:42, 237.86s/it]Epoch 3/10 | training error: 37.51% | test error: 36.41
+%:  30%|███       | 3/10 [11:37<26:12, 224.62s/it]Epoch 4/10 | training error: 29.51% | test error: 30.60
+%:  40%|████      | 4/10 [15:05<21:49, 218.31s/it]Epoch 5/10 | training error: 25.59% | test error: 27.19
+%:  50%|█████     | 5/10 [18:33<17:51, 214.39s/it]Epoch 6/10 | training error: 21.83% | test error: 24.70
+%:  60%|██████    | 6/10 [22:00<14:07, 211.92s/it]Epoch 7/10 | training error: 20.87% | test error: 22.28
+%:  70%|███████   | 7/10 [25:28<10:32, 210.83s/it]Epoch 8/10 | training error: 18.09% | test error: 22.00
+%:  80%|████████  | 8/10 [28:57<07:00, 210.15s/it]Epoch 9/10 | training error: 17.00% | test error: 20.83
+%:  90%|█████████ | 9/10 [32:26<03:29, 209.69s/it]Epoch 10/10 | training error: 15.23% | test error: 21.05
+%: 100%|██████████| 10/10 [35:51<00:00, 208.47s/it]Epoch 10/10 | training error: 15.23% | test error: 21.05
+%: 100%|██████████| 10/10 [35:51<00:00, 215.19s/it]
+Training complete.
+Training with initial variance mean: 1.0
+Files already downloaded and verified
+Files already downloaded and verified
+Training Progress:   0%|          | 0/10 [00:00<?, ?it/s]Smart init done
+Prior predictive -> E[v_pred] =  0.77181107 +- 0.12725425
+Epoch 1/10 | training error: 67.53% | test error: 61.76
+%:  10%|█         | 1/10 [04:39<41:52, 279.17s/it]Epoch 2/10 | training error: 47.69% | test error: 44.89
+%:  20%|██        | 2/10 [08:07<31:41, 237.69s/it]Epoch 3/10 | training error: 36.09% | test error: 34.62
+%:  30%|███       | 3/10 [11:36<26:11, 224.45s/it]Epoch 4/10 | training error: 28.60% | test error: 29.40
+%:  40%|████      | 4/10 [15:05<21:49, 218.21s/it]Epoch 5/10 | training error: 25.34% | test error: 26.24
+%:  50%|█████     | 5/10 [18:33<17:53, 214.80s/it]Epoch 6/10 | training error: 22.29% | test error: 24.49
+%:  60%|██████    | 6/10 [22:02<14:10, 212.53s/it]Epoch 7/10 | training error: 20.87% | test error: 22.20
+%:  70%|███████   | 7/10 [25:27<10:30, 210.33s/it]Epoch 8/10 | training error: 18.70% | test error: 22.11
+%:  80%|████████  | 8/10 [28:53<06:57, 208.79s/it]Epoch 9/10 | training error: 17.35% | test error: 20.18
+%:  90%|█████████ | 9/10 [32:18<03:27, 207.79s/it]Epoch 10/10 | training error: 15.44% | test error: 19.87
+%: 100%|██████████| 10/10 [35:46<00:00, 207.85s/it]Epoch 10/10 | training error: 15.44% | test error: 19.87
+%: 100%|██████████| 10/10 [35:46<00:00, 214.69s/it]
+Training complete.
+Training with initial variance mean: 1.1
+Files already downloaded and verified
+Files already downloaded and verified
+Training Progress:   0%|          | 0/10 [00:00<?, ?it/s]Smart init done
+Prior predictive -> E[v_pred] =  0.70718247 +- 0.12515062
+Epoch 1/10 | training error: 65.65% | test error: 62.87
+%:  10%|█         | 1/10 [04:17<38:33, 257.01s/it]Epoch 2/10 | training error: 45.63% | test error: 42.75
+%:  20%|██        | 2/10 [07:45<30:27, 228.41s/it]Epoch 3/10 | training error: 34.96% | test error: 34.93
+%:  30%|███       | 3/10 [11:10<25:24, 217.80s/it]Epoch 4/10 | training error: 29.76% | test error: 29.51
+%:  40%|████      | 4/10 [14:37<21:20, 213.44s/it]Epoch 5/10 | training error: 25.46% | test error: 26.27
+%:  50%|█████     | 5/10 [18:02<17:33, 210.62s/it]Epoch 6/10 | training error: 22.16% | test error: 24.42
+%:  60%|██████    | 6/10 [21:28<13:55, 208.88s/it]Epoch 7/10 | training error: 20.52% | test error: 22.35
+%:  70%|███████   | 7/10 [24:56<10:25, 208.53s/it]Epoch 8/10 | training error: 19.06% | test error: 21.95
+%:  80%|████████  | 8/10 [28:24<06:56, 208.41s/it]Epoch 9/10 | training error: 16.70% | test error: 21.30
+%:  90%|█████████ | 9/10 [31:49<03:27, 207.50s/it]Epoch 10/10 | training error: 16.02% | test error: 19.56
+%: 100%|██████████| 10/10 [35:15<00:00, 206.88s/it]Epoch 10/10 | training error: 16.02% | test error: 19.56
+%: 100%|██████████| 10/10 [35:15<00:00, 211.54s/it]
+Training complete.
+Training with initial variance mean: 1.2
+Files already downloaded and verified
+Files already downloaded and verified
+Training Progress:   0%|          | 0/10 [00:00<?, ?it/s]Smart init done
+Prior predictive -> E[v_pred] =  0.7680867 +- 0.13004121
+Epoch 1/10 | training error: 65.24% | test error: 60.98
+%:  10%|█         | 1/10 [04:16<38:32, 256.92s/it]Epoch 2/10 | training error: 46.92% | test error: 42.47
+%:  20%|██        | 2/10 [07:45<30:27, 228.49s/it]Epoch 3/10 | training error: 34.92% | test error: 35.00
+%:  30%|███       | 3/10 [11:14<25:36, 219.48s/it]Epoch 4/10 | training error: 28.29% | test error: 28.05
+%:  40%|████      | 4/10 [14:39<21:24, 214.00s/it]Epoch 5/10 | training error: 25.05% | test error: 26.84
+%:  50%|█████     | 5/10 [18:05<17:34, 210.96s/it]Epoch 6/10 | training error: 21.50% | test error: 24.49
+%:  60%|██████    | 6/10 [21:30<13:56, 209.06s/it]Epoch 7/10 | training error: 20.00% | test error: 21.98
+%:  70%|███████   | 7/10 [24:58<10:25, 208.55s/it]Epoch 8/10 | training error: 18.52% | test error: 22.34
+%:  80%|████████  | 8/10 [28:24<06:55, 207.68s/it]Epoch 9/10 | training error: 17.01% | test error: 20.04
+%:  90%|█████████ | 9/10 [31:49<03:26, 206.96s/it]Epoch 10/10 | training error: 16.47% | test error: 18.93
+%: 100%|██████████| 10/10 [35:14<00:00, 206.48s/it]Epoch 10/10 | training error: 16.47% | test error: 18.93
+%: 100%|██████████| 10/10 [35:14<00:00, 211.49s/it]
+Training complete.

@@ -12,7 +12,6 @@ from pytagi.nn import (
 
 def make_layer_block(in_c: int, out_c: int, stride: int = 1, padding_type: int = 1, gain_weight: float = 1, gain_bias: float = 1):
     """Create a layer block for resnet 18"""
-
     return LayerBlock(
         Conv2d(
             in_c,

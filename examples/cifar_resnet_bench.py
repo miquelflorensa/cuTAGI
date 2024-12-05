@@ -15,6 +15,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 import torch.nn as nn
 import torch.optim as optim
+import pytagi
 
 from pytagi import HRCSoftmaxMetric, Utils, exponential_scheduler
 from pytagi.nn import (
@@ -29,8 +30,6 @@ from pytagi.nn import (
 )
 from examples.tagi_resnet_model import resnet18_cifar10
 from examples.torch_resnet_model import ResNet18
-
-torch.manual_seed(17)
 
 # Constants for dataset normalization
 NORMALIZATION_MEAN = [0.4914, 0.4822, 0.4465]
@@ -210,6 +209,7 @@ def tagi_trainer(
     batch_size: int,
     device: str,
     sigma_v: float,
+    var_mean: float,
 ):
     """
     Run classification training on the Cifar dataset using a custom neural model.
@@ -218,6 +218,10 @@ def tagi_trainer(
     - num_epochs: int, number of epochs for training
     - batch_size: int, size of the batch for training
     """
+
+    pytagi.manual_seed(11)
+
+
     utils = Utils()
     train_loader, test_loader = load_datasets(batch_size, "tagi")
 
@@ -226,7 +230,7 @@ def tagi_trainer(
 
     # Resnet18
     # net = TAGI_CNN_NET
-    net = resnet18_cifar10(gain_w=0.15, gain_b=0.15)
+    net = resnet18_cifar10(gain_w=var_mean, gain_b=var_mean)
     net.to_device(device)
     # net.set_threads(10)
     out_updater = OutputUpdater(net.device)
@@ -236,6 +240,9 @@ def tagi_trainer(
     var_y = np.full(
         (batch_size * metric.hrc_softmax.num_obs,), sigma_v**2, dtype=np.float32
     )
+
+    smart_init = False
+
     pbar = tqdm(range(num_epochs), desc="Training Progress")
     print_var = True
     for epoch in pbar:
@@ -251,6 +258,10 @@ def tagi_trainer(
             )
         net.train()
         for x, labels in train_loader:
+            if smart_init:
+                net.smart_init(x, None, var_mean, 1.0)
+                smart_init = False
+
             # Feedforward and backward pass
             m_pred, v_pred = net(x)
             if print_var: # Print prior predictive variance
@@ -367,16 +378,23 @@ def torch_trainer(batch_size: int, num_epochs: int, device: str = "cuda"):
 def main(
     framework: str = "tagi",
     batch_size: int = 128,
-    epochs: int = 50,
+    epochs: int = 10,
     device: str = "cuda",
     sigma_v: float = 0.1,
 ):
     if framework == "torch":
         torch_trainer(batch_size=batch_size, num_epochs=epochs, device=device)
     elif framework == "tagi":
-        tagi_trainer(
-            batch_size=batch_size, num_epochs=epochs, device=device, sigma_v=sigma_v
-        )
+        gains=[0.05, 0.1, 0.15, 0.2, 0.4]
+        # initial_var_mean = [0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6 ,0.7, 0.8, 0.9, 1.0, 1.1, 1.2]
+        # initial_var_mean = [0.5, 0.6 ,0.7, 0.8, 0.9, 1.0, 1.1, 1.2]
+        # initial_var_mean = [1.0]
+        # print(f"Training with gain = 0.15")
+        for gain in gains:
+            print(f"Training with initial variance mean: {gain}")
+            tagi_trainer(
+                batch_size=batch_size, num_epochs=epochs, device=device, sigma_v=sigma_v, var_mean=gain
+            )
     else:
         raise RuntimeError(f"Invalid Framework: {framework}")
 

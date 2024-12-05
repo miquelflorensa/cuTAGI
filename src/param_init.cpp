@@ -80,6 +80,30 @@ std::tuple<std::vector<float>, std::vector<float>> gaussian_param_init(
     return {m, S};
 }
 
+std::tuple<std::vector<float>, std::vector<float>> gaussian_param_init_tuned(
+    float scale, float gain_var, float gain_mean, int N) {
+    // Get generator
+    std::mt19937 &gen = SeedManager::get_instance().get_engine();
+
+    // Initialize pointers
+    std::vector<float> S(N);
+    std::vector<float> m(N);
+
+    // Weights
+    for (int i = 0; i < N; i++) {
+        // Variance
+        S[i] = pow(gain_var * scale, 2);
+
+        // Get normal distribution
+        std::normal_distribution<float> d(0.0f, scale);
+
+        // Get sample for weights
+        m[i] = d(gen) * gain_mean * gain_var;
+    }
+
+    return {m, S};
+}
+
 std::tuple<std::vector<float>, std::vector<float>> gaussian_param_init_ni(
     float scale, float gain, float noise_gain, int N)
 /* Parmeter initialization of TAGI neural network including the noise's
@@ -179,7 +203,9 @@ init_weight_bias_conv2d(const size_t kernel_size, const size_t in_channels,
 
     // Initalize weights & biases
     std::vector<float> mu_w, var_w, mu_b, var_b;
-    std::tie(mu_w, var_w) = gaussian_param_init(scale, gain_w, num_weights);
+    std::tie(mu_w, var_w) =
+        // gaussian_param_init_tuned(scale, gain_w, gain_b, num_weights);
+        gaussian_param_init(scale, gain_w, num_weights);
 
     if (num_biases > 0) {
         std::tie(mu_b, var_b) = gaussian_param_init(scale, gain_b, num_biases);

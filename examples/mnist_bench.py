@@ -1,3 +1,12 @@
+# Temporary import. It will be removed in the final vserion
+import os
+import sys
+
+# Add the 'build' directory to sys.path in one line
+sys.path.append(
+    os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "build"))
+)
+
 import fire
 import numpy as np
 import torch
@@ -6,6 +15,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 from tqdm import tqdm
+import pytagi
 
 from pytagi import HRCSoftmaxMetric, Utils, exponential_scheduler
 from pytagi.nn import (
@@ -16,14 +26,6 @@ from pytagi.nn import (
     OutputUpdater,
     ReLU,
     Sequential,
-)
-
-TAGI_FNN = Sequential(
-    Linear(784, 4096),
-    ReLU(),
-    Linear(4096, 4096),
-    ReLU(),
-    Linear(4096, 11),
 )
 
 TAGI_CNN = Sequential(
@@ -38,14 +40,17 @@ TAGI_CNN = Sequential(
     Linear(256, 11),
 )
 
+gain = 1.0
+gain_mean = 1.0
+
 TAGI_CNN_BATCHNORM = Sequential(
-    Conv2d(1, 32, 4, padding=1, in_width=28, in_height=28, bias=False),
+    Conv2d(1, 32, 4, padding=1, in_width=28, in_height=28, bias=False, gain_weight=gain, gain_bias=gain_mean),
     ReLU(),
-    BatchNorm2d(32),
+    BatchNorm2d(32, bias=False),
     AvgPool2d(3, 2),
-    Conv2d(32, 64, 5, bias=False),
+    Conv2d(32, 64, 5, bias=False, gain_weight=gain, gain_bias=gain_mean),
     ReLU(),
-    BatchNorm2d(64),
+    BatchNorm2d(64, bias=False),
     AvgPool2d(3, 2),
     Linear(64 * 4 * 4, 256),
     ReLU(),
@@ -146,7 +151,7 @@ def custom_collate_fn(batch):
 
 
 def tagi_trainer(
-    batch_size: int, num_epochs: int, device: str = "cpu", sigma_v: float = 2.0
+    batch_size: int, num_epochs: int, device: str = "cpu", sigma_v: float = 2.0, var_mean: float = 1.0
 ):
     # Data loading and preprocessing
     transform = transforms.Compose(
@@ -163,7 +168,7 @@ def tagi_trainer(
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
-        shuffle=True,
+        shuffle=False,
         num_workers=1,
         collate_fn=custom_collate_fn,
     )
@@ -177,6 +182,50 @@ def tagi_trainer(
 
     utils = Utils()
 
+    gain = 1.0
+    gain_mean = 1.0
+
+    pytagi.manual_seed(42)
+
+    # TAGI_CNN_BATCHNORM = Sequential(
+    #     Conv2d(1, 32, 4, padding=1, in_width=28, in_height=28, bias=False, gain_weight=gain, gain_bias=gain_mean),
+    #     ReLU(),
+    #     BatchNorm2d(32, bias=False),
+    #     AvgPool2d(3, 2),
+    #     Conv2d(32, 64, 5, bias=False, gain_weight=gain, gain_bias=gain_mean),
+    #     ReLU(),
+    #     BatchNorm2d(64, bias=False),
+    #     AvgPool2d(3, 2),
+    #     Conv2d(64, 128, 5, bias=False, gain_weight=gain, gain_bias=gain_mean),
+    #     ReLU(),
+    #     BatchNorm2d(128, bias=False),
+    #     AvgPool2d(3, 2),
+    #     Linear(128, 256),
+    #     ReLU(),
+    #     Linear(256, 11),
+    # )
+
+    TAGI_FNN = Sequential(
+    Linear(784, 4096),
+    ReLU(),
+    Linear(4096, 4096),
+    ReLU(),
+    Linear(4096, 4096),
+    ReLU(),
+    Linear(4096, 4096),
+    ReLU(),
+    Linear(4096, 4096),
+    ReLU(),
+    Linear(4096, 4096),
+    ReLU(),
+    Linear(4096, 4096),
+    ReLU(),
+    Linear(4096, 4096),
+    ReLU(),
+    Linear(4096, 11),
+)
+
+
     # Hierachical Softmax
     metric = HRCSoftmaxMetric(num_classes=10)
     net = TAGI_FNN
@@ -188,20 +237,44 @@ def tagi_trainer(
     error_rates = []
     pbar = tqdm(range(num_epochs), desc="Training Progress")
 
+    #Smart init
+    smart_init = True
+
     for epoch in pbar:
         # count = 0
 
         # Decaying observation's variance
-        sigma_v = exponential_scheduler(
-            curr_v=sigma_v, min_v=0.1, decaying_factor=0.99, curr_iter=epoch
-        )
+        # sigma_v = exponential_scheduler(
+        #     curr_v=sigma_v, min_v=0.1, decaying_factor=0.99, curr_iter=epoch
+        # )
         var_y = np.full(
             (batch_size * metric.hrc_softmax.num_obs,), sigma_v**2, dtype=np.float32
         )
         net.train()
         for x, labels in train_loader:
+            if smart_init:
+                net.smart_init(x, None, var_mean, 1.0)
+                smart_init = False
+
+
             # Feedforward and backward pass
             m_pred, v_pred = net(x)
+
+
+            # Compute Expected value of v_pred, Expected value of s_pred,
+            # Variance of m_pred and std of m_pred
+            # mean_v_pred = np.mean(v_pred, axis=0)
+            # mean_s_pred = np.mean(np.sqrt(v_pred), axis=0)
+            # var_m_pred = np.var(m_pred, axis=0)
+            # std_m_pred = np.std(m_pred, axis=0)
+            # print(
+            #     f"Prior predictive -> E[v_pred] = {mean_v_pred:.6f} | E[s_pred] = {mean_s_pred:.6f}"
+            # )
+            # print(
+            #     f"                 -> V[m_pred] = {var_m_pred:.6f} | s[m_pred] = {std_m_pred:.6f}"
+            # )
+
+            # exit()
 
             # Update output layers based on targets
             y, y_idx, _ = utils.label_to_obs(labels=labels, num_classes=10)
@@ -240,6 +313,8 @@ def tagi_trainer(
             refresh=True,
         )
     print("Training complete.")
+    # Print on a file the final error rate
+
 
 
 def torch_trainer(batch_size: int, num_epochs: int, device: str = "cpu"):
@@ -324,13 +399,16 @@ def torch_trainer(batch_size: int, num_epochs: int, device: str = "cpu"):
 def main(
     framework: str = "tagi",
     batch_size: int = 128,
-    epochs: int = 20,
+    epochs: int = 5,
     device: str = "cuda",
+    initial_var_mean: float = 1.0,
 ):
     if framework == "torch":
         torch_trainer(batch_size=batch_size, num_epochs=epochs, device=device)
     elif framework == "tagi":
-        tagi_trainer(batch_size=batch_size, num_epochs=epochs, device=device)
+        initial_var_mean = [0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6 ,0.7, 0.8, 0.9, 1.0, 1.1, 1.2]
+        for var_mean in initial_var_mean:
+            tagi_trainer(batch_size=batch_size, num_epochs=epochs, device=device, sigma_v=0.01, var_mean=var_mean)
     else:
         raise RuntimeError(f"Invalid Framework: {framework}")
 
