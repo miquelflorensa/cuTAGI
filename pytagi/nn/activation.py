@@ -119,6 +119,17 @@ class Softmax(BaseLayer):
     def get_layer_name(self) -> str:
         return self._cpp_backend.get_layer_name()
 
+class Remax(BaseLayer):
+    """Remax"""
+
+    def __init__(self):
+        self._cpp_backend = cutagi.Remax()
+
+    def get_layer_info(self) -> str:
+        return self._cpp_backend.get_layer_info()
+
+    def get_layer_name(self) -> str:
+        return self._cpp_backend.get_layer_name()
 
 class EvenExp(BaseLayer):
     """EvenExp"""

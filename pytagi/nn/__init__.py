@@ -8,6 +8,7 @@ from pytagi.nn.activation import (
     Softmax,
     Softplus,
     Tanh,
+    Remax,
     EvenExp,
 )
 from pytagi.nn.base_layer import BaseLayer

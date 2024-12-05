@@ -47,7 +47,8 @@ def custom_collate_fn(batch):
 def load_datasets(batch_size: int, framework: str = "torch"):
     """Load the ImageNet dataset."""
     # Data Transforms
-    data_dir = "data/imagenet/ILSVRC/Data/CLS-LOC"
+    # data_dir = "data/imagenet/ILSVRC/Data/CLS-LOC"
+    data_dir = "/usr/local/share/imagenet/ILSVRC/Data/CLS-LOC"
     norm_mean = [0.485, 0.456, 0.406]
     norm_std = [0.229, 0.224, 0.225]
     train_transforms = transforms.Compose(

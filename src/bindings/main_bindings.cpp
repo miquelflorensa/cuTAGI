@@ -17,6 +17,7 @@ PYBIND11_MODULE(cutagi, modo) {
     bind_softplus(modo);
     bind_leakyrelu(modo);
     bind_softmax(modo);
+    bind_remax(modo);
     bind_even_exp(modo);
     bind_linear_layer(modo);
     bind_slinear_layer(modo);

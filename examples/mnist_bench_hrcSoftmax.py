@@ -7,6 +7,7 @@ sys.path.append(
     os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "build"))
 )
 
+
 import fire
 import numpy as np
 import torch
@@ -25,10 +26,6 @@ from pytagi.nn import (
     OutputUpdater,
     ReLU,
     Sequential,
-    Remax,
-    MixtureReLU,
-    MixtureSigmoid,
-    Softmax,
 )
 
 
@@ -109,85 +106,6 @@ class TorchCNNBatchNorm(nn.Module):
         return self.model(x)
 
 
-import numpy as np
-from scipy.stats import norm
-
-def mixture_relu_mean_var(m_pred, v_pred):
-    """
-    Python implementation of mixture ReLU function to calculate mean and variance.
-
-    Parameters:
-        m_pred (np.ndarray): Mean predictions (1D array of shape batch_size * num_classes).
-        v_pred (np.ndarray): Variance predictions (1D array of shape batch_size * num_classes).
-
-    Returns:
-        M_m_pred (np.ndarray): Adjusted means after applying mixture ReLU.
-        M_v_pred (np.ndarray): Adjusted variances after applying mixture ReLU.
-    """
-    # Ensure inputs are numpy arrays
-    m_pred = np.array(m_pred)
-    v_pred = np.array(v_pred)
-
-    # Initialize outputs
-    M_m_pred = np.zeros_like(m_pred)
-    M_v_pred = np.zeros_like(v_pred)
-
-    # Calculate the moments for each element
-    for i in range(len(m_pred)):
-        std_z = np.sqrt(v_pred[i])
-        alpha = m_pred[i] / std_z
-        pdf_alpha = norm.pdf(alpha)  # Standard normal PDF
-        cdf_alpha = norm.cdf(alpha)  # Standard normal CDF
-
-        # Mean adjustment
-        M_m_pred[i] = m_pred[i] * cdf_alpha + std_z * pdf_alpha
-
-        # Variance adjustment
-        M_v_pred[i] = -M_m_pred[i] ** 2 + 2 * M_m_pred[i] * m_pred[i] - \
-                      m_pred[i] * std_z * pdf_alpha + \
-                      (v_pred[i] - m_pred[i] ** 2) * cdf_alpha
-
-    return M_m_pred, M_v_pred
-
-def compute_remax_predictions(m_pred, v_pred, batch_size):
-    """
-    Compute the transformed means (A_m_pred) and variances (A_v_pred) for remax probabilities.
-
-    Args:
-        m_pred (np.ndarray): 1D array of predicted means (shape: [batch_size * num_classes]).
-        v_pred (np.ndarray): 1D array of predicted variances (shape: [batch_size * num_classes]).
-        batch_size (int): Number of batches.
-
-    Returns:
-        A_m_pred (np.ndarray): 1D array of transformed means (shape: [batch_size * num_classes]).
-        A_v_pred (np.ndarray): 1D array of transformed variances (shape: [batch_size * num_classes]).
-    """
-    no = len(m_pred) // batch_size  # Number of classes per batch
-
-    # Reshape to 2D arrays for batch processing
-    m_pred = m_pred.reshape(batch_size, no)
-    v_pred = v_pred.reshape(batch_size, no)
-
-    # Step 1: Convert to log space
-    v_log = np.log(1.0 + v_pred / (m_pred ** 2))
-    m_log = np.log(m_pred) - 0.5 * v_log
-
-    # Step 2: Compute log-sum-exp means and variances
-    m_logsum = np.log(np.sum(np.exp(m_log + 0.5 * v_log), axis=1))  # Shape: [batch_size]
-    v_logsum = np.log(1.0 + np.sum(v_pred / m_pred**2, axis=1))     # Shape: [batch_size]
-
-    # Step 3: Compute covariance between log and log-sum
-    cov_log_logsum = np.log(1.0 + v_pred / (np.expand_dims(np.sum(m_pred, axis=1), axis=1) * m_pred))
-
-    # Step 4: Compute final means and variances
-    tmp_mu = m_log - m_logsum[:, None]
-    tmp_var = v_log + v_logsum[:, None] - 2 * cov_log_logsum
-    A_m_pred = np.exp(tmp_mu + 0.5 * tmp_var)  # Shape: [batch_size, no]
-    A_v_pred = m_pred**2 * (np.exp(tmp_var) - 1.0)  # Shape: [batch_size, no]
-
-    # Flatten the results back to 1D arrays
-    return A_m_pred.flatten(), A_v_pred.flatten()
-
 def custom_collate_fn(batch):
     # batch is a list of tuples (image, label)
     batch_images, batch_labels = zip(*batch)
@@ -236,7 +154,7 @@ def tagi_trainer(
     utils = Utils()
 
     # Hierachical Softmax
-    # metric = HRCSoftmaxMetric(num_classes=10)
+    metric = HRCSoftmaxMetric(num_classes=10)
 
     import pytagi
     pytagi.manual_seed(42)
@@ -246,27 +164,22 @@ def tagi_trainer(
     ReLU(),
     Linear(4096, 4096),
     ReLU(),
-    Linear(4096, 10),
-    MixtureSigmoid(),
-    Remax(),
+    Linear(4096, 11),
     )
 
     TAGI_CNN_BATCHNORM = Sequential(
-    Conv2d(1, 32, 4, padding=1, in_width=28, in_height=28, bias=False),
-    ReLU(),
-    BatchNorm2d(32),
-    AvgPool2d(3, 2),
-    Conv2d(32, 64, 5, bias=False),
-    ReLU(),
-    BatchNorm2d(64),
-    AvgPool2d(3, 2),
-    Linear(64 * 4 * 4, 256),
-    ReLU(),
-    Linear(256, 10),
-    # MixtureSigmoid(),
-    # Remax(),
+        Conv2d(1, 32, 4, padding=1, in_width=28, in_height=28, bias=False),
+        ReLU(),
+        BatchNorm2d(32),
+        AvgPool2d(3, 2),
+        Conv2d(32, 64, 5, bias=False),
+        ReLU(),
+        BatchNorm2d(64),
+        AvgPool2d(3, 2),
+        Linear(64 * 4 * 4, 256),
+        ReLU(),
+        Linear(256, 11),
     )
-
 
     net = TAGI_CNN_BATCHNORM
     net.to_device(device)
@@ -285,27 +198,20 @@ def tagi_trainer(
         #     curr_v=sigma_v, min_v=0.1, decaying_factor=0.99, curr_iter=epoch
         # )
         var_y = np.full(
-            (batch_size * 10,), sigma_v**2, dtype=np.float32
+            (batch_size * metric.hrc_softmax.num_obs,), sigma_v**2, dtype=np.float32
         )
         net.train()
         for x, labels in train_loader:
             # Feedforward and backward pass
             m_pred, v_pred = net(x)
-            print(f"m_pred: {m_pred}")
 
-            y = np.full((batch_size * 10,), 0.0, dtype=np.float32)
-            # print(f"y: {y}")
-            # print(f"labels: {labels}")
-
-            for i in range(len(labels)):
-                y[i * 10 + labels[i]] = 1.0
-
-            # print(f"y: {y}")
-
-            out_updater.update(
+            # Update output layers based on targets
+            y, y_idx, _ = utils.label_to_obs(labels=labels, num_classes=10)
+            out_updater.update_using_indices(
                 output_states=net.output_z_buffer,
                 mu_obs=y,
                 var_obs=var_y,
+                selected_idx=y_idx,
                 delta_states=net.input_delta_z_buffer,
             )
 
@@ -313,24 +219,9 @@ def tagi_trainer(
             net.backward()
             net.step()
 
-            # Take m_pred with highest value as prediction for each batch
-
-            M_m_pred, M_v_pred = mixture_relu_mean_var(m_pred, v_pred)
-            A_m_pred, A_v_pred = compute_remax_predictions(M_m_pred, M_v_pred, len(labels))
-
-            error = 0
-            for i in range(len(labels)):
-                pred = np.argmax(A_m_pred[i * 10 : (i + 1) * 10])
-                if pred != labels[i]:
-                    error += 1
-
-            error_rates.append(error / len(labels))
-
-                # print(f"Predicted: {pred} | Actual: {labels[i]}")
-
             # Training metric
-            # error_rate = metric.error_rate(m_pred, v_pred, labels)
-            # error_rates.append(error_rate)
+            error_rate = metric.error_rate(m_pred, v_pred, labels)
+            error_rates.append(error_rate)
 
         # Averaged error
         avg_error_rate = sum(error_rates[-100:])
@@ -342,19 +233,8 @@ def tagi_trainer(
             m_pred, v_pred = net(x)
 
             # Training metric
-            # error_rate = metric.error_rate(m_pred, v_pred, labels)
-            # test_error_rates.append(error_rate)
-
-            M_m_pred, M_v_pred = mixture_relu_mean_var(m_pred, v_pred)
-            A_m_pred, A_v_pred = compute_remax_predictions(M_m_pred, M_v_pred, len(labels))
-
-            for i in range(len(labels)):
-                pred = np.argmax(A_m_pred[i * 10 : (i + 1) * 10])
-                if pred != labels[i]:
-                    test_error_rates.append(1)
-                else:
-                    test_error_rates.append(0)
-                # print(f"Predicted: {pred} | Actual: {labels[i]}")
+            error_rate = metric.error_rate(m_pred, v_pred, labels)
+            test_error_rates.append(error_rate)
 
         test_error_rate = sum(test_error_rates) / len(test_error_rates)
         pbar.set_description(
