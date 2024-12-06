@@ -1121,6 +1121,10 @@ void compute_remax_prob(std::vector<float> &mu_m, std::vector<float> &mu_log,
     float tmp_mu, tmp_var, tmp_mu_a;
     for (int i = 0; i < B; i++) {
         for (int j = 0; j < no; j++) {
+            float cov_a_hat_ln_M =
+                var_log[i * no + j] - cov_log_logsum[i * no + j];
+            float cov_a_hat_M = cov_a_hat_ln_M * mu_m[i * no + j];
+
             tmp_mu = mu_log[i * no + j] - mu_logsum[i];
             tmp_var = var_log[i * no + j] + var_logsum[i] -
                       2 * cov_log_logsum[i * no + j];
@@ -1128,7 +1132,8 @@ void compute_remax_prob(std::vector<float> &mu_m, std::vector<float> &mu_log,
             mu_a[i * no + j] = tmp_mu_a;
             var_a[i * no + j] =
                 mu_m[i * no + j] * mu_m[i * no + j] * (expf(tmp_var) - 1.0f);
-            jcb[i * no + j] = tmp_mu_a * (1 - tmp_mu_a);
+            // jcb[i * no + j] = tmp_mu_a * (1 - tmp_mu_a);
+            jcb[i * no + j] = expf(tmp_mu + 0.5f * tmp_var) * cov_a_hat_M;
         }
     }
 }

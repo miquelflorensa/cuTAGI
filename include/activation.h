@@ -93,6 +93,26 @@ void softmax_mean_var(std::vector<float> &mu_z, std::vector<float> &var_z,
                       int no, int batch_size, std::vector<float> &mu_a,
                       std::vector<float> &jcb, std::vector<float> &var_a);
 
+void to_log(std::vector<float> &mu_m, std::vector<float> &var_m, int no, int B,
+            std::vector<float> &mu_log, std::vector<float> &var_log);
+
+void sum_class_hidden_states(std::vector<float> &mu_m,
+                             std::vector<float> &var_m, int no, int B,
+                             std::vector<float> &mu_sum,
+                             std::vector<float> &var_sum);
+
+void compute_cov_log_logsum(std::vector<float> &mu_m, std::vector<float> &var_m,
+                            std::vector<float> &mu_sum, int no, int B,
+                            std::vector<float> &cov_log_logsum);
+
+void compute_remax_prob(std::vector<float> &mu_m, std::vector<float> &mu_log,
+                        std::vector<float> &var_log,
+                        std::vector<float> &mu_logsum,
+                        std::vector<float> &var_logsum,
+                        std::vector<float> &cov_log_logsum, int no, int B,
+                        std::vector<float> &mu_a, std::vector<float> &var_a,
+                        std::vector<float> &jcb);
+
 void even_exp_mean_var(std::vector<float> const &mu_z,
                        std::vector<float> const &var_z,
                        std::vector<float> &jcb_z, int start_chunk,

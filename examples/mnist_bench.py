@@ -204,7 +204,7 @@ def custom_collate_fn(batch):
 
 
 def tagi_trainer(
-    batch_size: int, num_epochs: int, device: str = "cpu", sigma_v: float = 2.0
+    batch_size: int, num_epochs: int, device: str = "cpu", sigma_v: float = 0.2
 ):
     # Data loading and preprocessing
     transform = transforms.Compose(
@@ -247,8 +247,8 @@ def tagi_trainer(
     Linear(4096, 4096),
     ReLU(),
     Linear(4096, 10),
-    MixtureSigmoid(),
-    Remax(),
+    # MixtureSigmoid(),
+    # Remax(),
     )
 
     TAGI_CNN_BATCHNORM = Sequential(
@@ -291,7 +291,7 @@ def tagi_trainer(
         for x, labels in train_loader:
             # Feedforward and backward pass
             m_pred, v_pred = net(x)
-            print(f"m_pred: {m_pred}")
+            # print(f"m_pred: {m_pred}")
 
             y = np.full((batch_size * 10,), 0.0, dtype=np.float32)
             # print(f"y: {y}")
@@ -315,18 +315,18 @@ def tagi_trainer(
 
             # Take m_pred with highest value as prediction for each batch
 
-            M_m_pred, M_v_pred = mixture_relu_mean_var(m_pred, v_pred)
-            A_m_pred, A_v_pred = compute_remax_predictions(M_m_pred, M_v_pred, len(labels))
+            # M_m_pred, M_v_pred = mixture_relu_mean_var(m_pred, v_pred)
+            # A_m_pred, A_v_pred = compute_remax_predictions(M_m_pred, M_v_pred, len(labels))
 
             error = 0
             for i in range(len(labels)):
-                pred = np.argmax(A_m_pred[i * 10 : (i + 1) * 10])
+                pred = np.argmax(m_pred[i * 10 : (i + 1) * 10])
                 if pred != labels[i]:
                     error += 1
+                # print(f"Predicted: {pred} | Actual: {labels[i]}")
+
 
             error_rates.append(error / len(labels))
-
-                # print(f"Predicted: {pred} | Actual: {labels[i]}")
 
             # Training metric
             # error_rate = metric.error_rate(m_pred, v_pred, labels)
@@ -345,11 +345,11 @@ def tagi_trainer(
             # error_rate = metric.error_rate(m_pred, v_pred, labels)
             # test_error_rates.append(error_rate)
 
-            M_m_pred, M_v_pred = mixture_relu_mean_var(m_pred, v_pred)
-            A_m_pred, A_v_pred = compute_remax_predictions(M_m_pred, M_v_pred, len(labels))
+            # M_m_pred, M_v_pred = mixture_relu_mean_var(m_pred, v_pred)
+            # A_m_pred, A_v_pred = compute_remax_predictions(M_m_pred, M_v_pred, len(labels))
 
             for i in range(len(labels)):
-                pred = np.argmax(A_m_pred[i * 10 : (i + 1) * 10])
+                pred = np.argmax(m_pred[i * 10 : (i + 1) * 10])
                 if pred != labels[i]:
                     test_error_rates.append(1)
                 else:
