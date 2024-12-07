@@ -54,7 +54,8 @@ __global__ void softmax_mean_var_cuda(float const *mu_z, float *var_z,
                                       float *mu_a, float *jcb, float *var_a);
 
 __global__ void remax_forward_cuda(float *mu_m, float *var_m, int no, int B,
-                                   float *mu_a, float *var_a, float *jcb);
+                                   float *mu_a, float *var_a, float *jcb,
+                                   float *var_a_original);
 
 __global__ void even_exp_mean_var_cuda(float const *mu_z, float const *var_z,
                                        float const *jcb_z, int num_states,

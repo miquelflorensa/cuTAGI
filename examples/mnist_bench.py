@@ -204,7 +204,7 @@ def custom_collate_fn(batch):
 
 
 def tagi_trainer(
-    batch_size: int, num_epochs: int, device: str = "cpu", sigma_v: float = 0.2
+    batch_size: int, num_epochs: int, device: str = "cpu", sigma_v: float = 0.0
 ):
     # Data loading and preprocessing
     transform = transforms.Compose(
@@ -445,7 +445,7 @@ def torch_trainer(batch_size: int, num_epochs: int, device: str = "cpu"):
 
 def main(
     framework: str = "tagi",
-    batch_size: int = 128,
+    batch_size: int = 16,
     epochs: int = 10,
     device: str = "cuda",
 ):

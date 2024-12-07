@@ -1,6 +1,5 @@
-#include "../include/output_updater_cuda.cuh"
 #include "../include/activation_cuda.cuh"
-
+#include "../include/output_updater_cuda.cuh"
 
 __global__ void update_delta_z_using_indices_cuda(
     float const *mu_a, float const *var_a, float const *jcb, float const *obs,
@@ -134,13 +133,20 @@ void OutputUpdaterCuda::set_num_cuda_threads(unsigned int num_threads) {
     this->num_cuda_threads = num_threads;
 }
 
+__global__ void add_var_obs_to_var_a(float *d_var_a, const float *d_var_obs,
+                                     int no, int B) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < B * no) {
+        int i = idx / no;
+        int j = idx % no;
+        d_var_a[idx] += d_var_obs[j];
+    }
+}
+
 void OutputUpdaterCuda::update_output_delta_z(BaseHiddenStates &output_states,
                                               BaseObservation &obs,
-                                              BaseDeltaStates &delta_states, int no,
-                                                int B)
-/*
- */
-{
+                                              BaseDeltaStates &delta_states,
+                                              int no, int B) {
     // Cast to cuda object
     HiddenStateCuda *cu_output_states =
         dynamic_cast<HiddenStateCuda *>(&output_states);
@@ -157,43 +163,48 @@ void OutputUpdaterCuda::update_output_delta_z(BaseHiddenStates &output_states,
     // Reset delta to zero
     cu_delta_states->reset_zeros();
 
-    // Add cu_obs->d_var_obs to cu_output_states->d_var_a
-    for (int i = 0; i < B; i++) {
-        for (int j = 0; j < no; j++) {
-            int idx = i * no + j;
-            cu_output_states->d_var_a[idx] += cu_obs->d_var_obs[j];
-        }
-    }
+    // Save the original var_a in a vector
+    float *d_var_a_backup;
+    int var_a_size =
+        cu_output_states->actual_size * cu_output_states->block_size;
 
-    // Mixture ReLU
     int num_states =
         cu_output_states->actual_size * cu_output_states->block_size;
     int blocks =
         (num_states + this->num_cuda_threads - 1) / this->num_cuda_threads;
 
+    add_var_obs_to_var_a<<<blocks, this->num_cuda_threads>>>(
+        cu_output_states->d_var_a, cu_obs->d_var_obs, no, B);
+
+    // Mixture ReLU
     mixture_relu_mean_var_cuda<<<blocks, this->num_cuda_threads>>>(
         cu_output_states->d_mu_a, cu_output_states->d_var_a, num_states,
         cu_output_states->d_mu_a, cu_output_states->d_jcb,
         cu_output_states->d_var_a);
+    cudaDeviceSynchronize();
 
     // Remax
     blocks = (cu_output_states->block_size + this->num_cuda_threads - 1) /
              this->num_cuda_threads;
-    // Call the combined CUDA kernel
     remax_forward_cuda<<<blocks, this->num_cuda_threads>>>(
         cu_output_states->d_mu_a, cu_output_states->d_var_a, no, B,
         cu_output_states->d_mu_a, cu_output_states->d_var_a,
-        cu_output_states->d_jcb);
+        cu_output_states->d_jcb, d_var_a_backup);
+    cudaDeviceSynchronize();
 
     // Update delta
     num_states = cu_obs->size;
-    blocks =
-        (num_states + this->num_cuda_threads - 1) / this->num_cuda_threads;
+    blocks = (num_states + this->num_cuda_threads - 1) / this->num_cuda_threads;
 
     update_delta_z_cuda<<<blocks, this->num_cuda_threads>>>(
         cu_output_states->d_mu_a, cu_output_states->d_var_a,
         cu_output_states->d_jcb, cu_obs->d_mu_obs, cu_obs->d_var_obs,
         num_states, cu_delta_states->d_delta_mu, cu_delta_states->d_delta_var);
+
+    cudaDeviceSynchronize();
+
+    // Free the backup memory
+    cudaFree(d_var_a_backup);
 }
 
 void OutputUpdaterCuda::update_selected_output_delta_z(
