@@ -164,6 +164,7 @@ def resnet18_imagenet(gain_w: float = 1, gain_b: float = 1,nb_outputs = 1000) ->
                     gain_weight=gain_w,
                     gain_bias=gain_b
                 ),
+                ReLU(),
                 BatchNorm2d(128),
             ),
         ),
@@ -181,6 +182,7 @@ def resnet18_imagenet(gain_w: float = 1, gain_b: float = 1,nb_outputs = 1000) ->
                     gain_weight=gain_w,
                     gain_bias=gain_b
                 ),
+                ReLU(),
                 BatchNorm2d(256),
             ),
         ),
@@ -198,6 +200,7 @@ def resnet18_imagenet(gain_w: float = 1, gain_b: float = 1,nb_outputs = 1000) ->
                     gain_weight=gain_w,
                     gain_bias=gain_b
                 ),
+                ReLU(),
                 BatchNorm2d(512),
             ),
         ),

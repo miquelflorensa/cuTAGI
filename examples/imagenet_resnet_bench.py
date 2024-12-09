@@ -125,17 +125,17 @@ def tagi_trainer(
     train_loader, test_loader = load_datasets(batch_size, "tagi", nb_classes = nb_classes)
 
     # Hierachical Softmax
-    metric = HRCSoftmaxMetric(num_classes=nb_classes)
+    # metric = HRCSoftmaxMetric(num_classes=nb_classes)
 
     # Resnet18
-    net = resnet18_imagenet(gain_w=0.05,gain_b=0.05, nb_outputs = nb_classes-1)
+    net = resnet18_imagenet(gain_w=0.05,gain_b=0.05, nb_outputs = nb_classes)
     device = "cpu" if not pytagi.cuda.is_available() else device
     net.to_device(device)
 
     # Training
     out_updater = OutputUpdater(net.device)
     var_y = np.full(
-        (batch_size * metric.hrc_softmax.num_obs), sigma_v**2, dtype=np.float32
+        (batch_size * nb_classes), sigma_v**2, dtype=np.float32
     )
     with tqdm(range(num_epochs), desc="Epoch Progress") as epoch_pbar:
         print_var = True
@@ -153,27 +153,30 @@ def tagi_trainer(
                         print_var = False
                     #exit()
                     # Update output layers based on targets
-                    y, y_idx, _ = utils.label_to_obs(labels=labels, num_classes=nb_classes)
-                    out_updater.update_using_indices(
+                    # y, y_idx, _ = utils.label_to_obs(labels=labels, num_classes=nb_classes)
+                    y = np.full((batch_size * nb_classes,), 0.0, dtype=np.float32)
+
+                    for i in range(len(labels)):
+                        y[i * nb_classes + labels[i]] = 1.0
+
+                    out_updater.update(
                         output_states=net.output_z_buffer,
-                        mu_obs=y/1,
+                        mu_obs=y,
                         var_obs=var_y,
-                        selected_idx=y_idx,
                         delta_states=net.input_delta_z_buffer,
                     )
                     net.backward()
                     net.step()
 
-                    # Training metric
-                    error_rate = metric.error_rate(m_pred, v_pred, labels)
-                    error_rates.append(error_rate)
+                    error = 0
+                    for i in range(len(labels)):
+                        pred = np.argmax(m_pred[i * nb_classes : (i + 1) * nb_classes])
+                        if pred != labels[i]:
+                            error += 1
+                        # print(f"Predicted: {pred} | Actual: {labels[i]}")
 
-                    if i > 0 and i % 100 == 0:
-                        avg_error_rate = sum(error_rates[-100:])
-                        batch_pbar.set_description(
-                            f"Training error: {avg_error_rate:.2f}%",
-                            refresh=True,
-                        )
+
+                    error_rates.append(error / len(labels))
 
             # Averaged training error
             avg_error_rate = sum(error_rates[-100:])
@@ -185,10 +188,17 @@ def tagi_trainer(
                 m_pred, v_pred = net(x)
 
                 # Training metric
-                error_rate = metric.error_rate(m_pred, v_pred, labels)
-                test_error_rates.append(error_rate)
+                # error_rate = metric.error_rate(m_pred, v_pred, labels)
+                for i in range(len(labels)):
+                    pred = np.argmax(m_pred[i * nb_classes : (i + 1) * nb_classes])
+                    if pred != labels[i]:
+                        test_error_rates.append(1)
+                    else:
+                        test_error_rates.append(0)
+                    # print(f"Predicted: {pred} | Actual: {labels[i]}")
 
             test_error_rate = sum(test_error_rates) / len(test_error_rates)
+
             epoch_pbar.set_description(
                 f"Epoch {epoch + 1}/{num_epochs} | training error: {avg_error_rate:.2f}% | test error: {test_error_rate * 100:.2f}\n%",
                 refresh=True,
