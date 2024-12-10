@@ -227,7 +227,7 @@ def tagi_trainer(
 
     # Resnet18
     # net = TAGI_CNN_NET
-    net = resnet18_cifar10(gain_w=0.8, gain_b=0.8)
+    net = resnet18_cifar10(gain_w=0.3, gain_b=0.3)
     net.to_device(device)
     # net.set_threads(10)
     out_updater = OutputUpdater(net.device)
