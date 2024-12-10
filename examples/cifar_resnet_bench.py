@@ -210,6 +210,7 @@ def tagi_trainer(
     batch_size: int,
     device: str,
     sigma_v: float,
+    nb_classes: int = 10,
 ):
     """
     Run classification training on the Cifar dataset using a custom neural model.
@@ -222,11 +223,11 @@ def tagi_trainer(
     train_loader, test_loader = load_datasets(batch_size, "tagi")
 
     # Hierachical Softmax
-    metric = HRCSoftmaxMetric(num_classes=10)
+    # metric = HRCSoftmaxMetric(num_classes=10)
 
     # Resnet18
     # net = TAGI_CNN_NET
-    net = resnet18_cifar10(gain_w=0.15, gain_b=0.15)
+    net = resnet18_cifar10(gain_w=0.8, gain_b=0.8)
     net.to_device(device)
     # net.set_threads(10)
     out_updater = OutputUpdater(net.device)
@@ -234,21 +235,13 @@ def tagi_trainer(
     # Training
 
     var_y = np.full(
-        (batch_size * metric.hrc_softmax.num_obs,), sigma_v**2, dtype=np.float32
+        (batch_size * nb_classes,), sigma_v**2, dtype=np.float32
     )
     pbar = tqdm(range(num_epochs), desc="Training Progress")
     print_var = True
     for epoch in pbar:
         error_rates = []
-        if epoch > 0:
-            sigma_v = exponential_scheduler(
-                curr_v=sigma_v, min_v=0, decaying_factor=1, curr_iter=epoch
-            )
-            var_y = np.full(
-                (batch_size * metric.hrc_softmax.num_obs,),
-                sigma_v**2,
-                dtype=np.float32,
-            )
+
         net.train()
         for x, labels in train_loader:
             # Feedforward and backward pass
@@ -263,12 +256,16 @@ def tagi_trainer(
                 print_var = False
 
             # Update output layers based on targets
-            y, y_idx, _ = utils.label_to_obs(labels=labels, num_classes=10)
-            out_updater.update_using_indices(
+            # y, y_idx, _ = utils.label_to_obs(labels=labels, num_classes=10)
+            y = np.full((batch_size * nb_classes,), 0.0, dtype=np.float32)
+
+            for i in range(len(labels)):
+                y[i * nb_classes + labels[i]] = 1.0
+
+            out_updater.update(
                 output_states=net.output_z_buffer,
                 mu_obs=y,
                 var_obs=var_y,
-                selected_idx=y_idx,
                 delta_states=net.input_delta_z_buffer,
             )
 
@@ -277,8 +274,15 @@ def tagi_trainer(
             net.step()
 
             # Training metric
-            error_rate = metric.error_rate(m_pred, v_pred, labels)
-            error_rates.append(error_rate)
+            error = 0
+            for i in range(len(labels)):
+                pred = np.argmax(m_pred[i * nb_classes : (i + 1) * nb_classes])
+                if pred != labels[i]:
+                    error += 1
+                # print(f"Predicted: {pred} | Actual: {labels[i]}")
+
+
+            error_rates.append(error / len(labels))
 
         # Averaged error
         avg_error_rate = sum(error_rates[-100:])
@@ -290,8 +294,13 @@ def tagi_trainer(
             m_pred, v_pred = net(x)
 
             # Training metric
-            error_rate = metric.error_rate(m_pred, v_pred, labels)
-            test_error_rates.append(error_rate)
+            for i in range(len(labels)):
+                pred = np.argmax(m_pred[i * nb_classes : (i + 1) * nb_classes])
+                if pred != labels[i]:
+                    test_error_rates.append(1)
+                else:
+                    test_error_rates.append(0)
+                # print(f"Predicted: {pred} | Actual: {labels[i]}")
 
         test_error_rate = sum(test_error_rates) / len(test_error_rates)
         pbar.set_description(
@@ -374,7 +383,7 @@ def main(
     batch_size: int = 128,
     epochs: int = 50,
     device: str = "cuda",
-    sigma_v: float = 0.1,
+    sigma_v: float = 0.01,
 ):
     if framework == "torch":
         torch_trainer(batch_size=batch_size, num_epochs=epochs, device=device)

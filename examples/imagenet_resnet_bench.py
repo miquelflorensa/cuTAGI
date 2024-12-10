@@ -128,7 +128,7 @@ def tagi_trainer(
     # metric = HRCSoftmaxMetric(num_classes=nb_classes)
 
     # Resnet18
-    net = resnet18_imagenet(gain_w=0.05,gain_b=0.05, nb_outputs = nb_classes)
+    net = resnet18_imagenet(gain_w=0.15, gain_b=0.15, nb_outputs = nb_classes)
     device = "cpu" if not pytagi.cuda.is_available() else device
     net.to_device(device)
 
@@ -138,7 +138,7 @@ def tagi_trainer(
         (batch_size * nb_classes), sigma_v**2, dtype=np.float32
     )
     with tqdm(range(num_epochs), desc="Epoch Progress") as epoch_pbar:
-        print_var = True
+        print_var = False
         for epoch in epoch_pbar:
             error_rates = []
             net.train()

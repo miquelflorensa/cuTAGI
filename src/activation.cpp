@@ -169,7 +169,9 @@ void mixture_relu_mean_var(std::vector<float> &mu_z, std::vector<float> &var_z,
         var_a[i] = -powf(mu_a[i], 2) + 2 * mu_a[i] * mu_z[i] -
                    mu_z[i] * std_z * pdf_alpha +
                    (var_z[i] - powf(mu_z[i], 2)) * cdf_alpha;
-        jcb[i] = cdf_alpha;
+        // jcb[i] = cdf_alpha;
+        // cov(Z,M) = cdf_alpha * var_z
+        jcb[i] = cdf_alpha * var_z[i];
     }
 }
 
@@ -1170,7 +1172,7 @@ void Remax::forward(BaseHiddenStates &input_states,
 
     compute_remax_prob(input_states.mu_a, mu_log, var_log, mu_logsum,
                        var_logsum, cov_log_logsum, no, B, output_states.mu_a,
-                       output_states.var_a, output_states.jcb);
+                       output_states.var_a, input_states.jcb);
 
     // Save activation mean and jacobian to the class member for backward pass
     this->input_size = input_states.actual_size;

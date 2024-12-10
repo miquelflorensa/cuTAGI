@@ -715,7 +715,7 @@ void RemaxCuda::forward(BaseHiddenStates &input_states,
     remax_forward_cuda<<<blocks, threads_per_block>>>(
         cu_input_states->d_mu_a, cu_input_states->d_var_a, no, B,
         cu_output_states->d_mu_a, cu_output_states->d_var_a,
-        cu_output_states->d_jcb, cu_output_states->d_var_a);
+        cu_output_states->d_jcb, cu_input_states->d_jcb);
 
     // Synchronize and check for errors
     cudaDeviceSynchronize();
@@ -976,7 +976,9 @@ __global__ void mixture_relu_mean_var_cuda(float const *mu_z,
         var_a[col] = -tmp_mu_a * tmp_mu_a + 2 * tmp_mu_a * tmp_mu_z -
                      tmp_mu_z * std_z * pdf_alpha +
                      (var_z[col] - tmp_mu_z * tmp_mu_z) * cdf_alpha;
-        jcb[col] = cdf_alpha;
+        // jcb[col] = cdf_alpha;
+        // cov(Z,M) = cdf_alpha * var_z
+        jcb[col] = cdf_alpha * var_z[col];
     }
 }
 
@@ -1140,7 +1142,7 @@ __global__ void softmax_mean_var_cuda(float const *mu_z, float *var_z,
 
 __global__ void remax_forward_cuda(float *mu_m, float *var_m, int no, int B,
                                    float *mu_a, float *var_a, float *jcb,
-                                   float *var_a_original) {
+                                   float *cov_M_Z) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < B * no) {
         int i = idx / no;
@@ -1193,7 +1195,7 @@ __global__ void remax_forward_cuda(float *mu_m, float *var_m, int no, int B,
         var_a[i * no + j] =
             mu_m[i * no + j] * mu_m[i * no + j] * (expf(tmp_var) - 1.0f);
         jcb[i * no + j] = expf(tmp_mu + 0.5f * tmp_var) * cov_a_hat_M /
-                          var_m[i * no + j] * var_a_original[i * no + j];
+                          var_m[i * no + j] * cov_M_Z[i * no + j];
     }
 }
 
