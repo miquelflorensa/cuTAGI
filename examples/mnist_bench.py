@@ -19,38 +19,13 @@ from pytagi.nn import (
 )
 
 TAGI_FNN = Sequential(
-    Linear(784, 4096),
+    Linear(784, 1000, gain_weight=0.2, init_method="Orthogonal"),
     ReLU(),
-    Linear(4096, 4096),
+    Linear(1000, 1000, gain_weight=0.2, init_method="Orthogonal"),
     ReLU(),
-    Linear(4096, 11),
+    Linear(1000, 11, gain_weight=0.2, init_method="Orthogonal"),
 )
 
-TAGI_CNN = Sequential(
-    Conv2d(1, 16, 4, padding=1, in_width=28, in_height=28),
-    ReLU(),
-    AvgPool2d(3, 2),
-    Conv2d(16, 32, 5),
-    ReLU(),
-    AvgPool2d(3, 2),
-    Linear(32 * 4 * 4, 256),
-    ReLU(),
-    Linear(256, 11),
-)
-
-TAGI_CNN_BATCHNORM = Sequential(
-    Conv2d(1, 32, 4, padding=1, in_width=28, in_height=28, bias=False),
-    ReLU(),
-    BatchNorm2d(32),
-    AvgPool2d(3, 2),
-    Conv2d(32, 64, 5, bias=False),
-    ReLU(),
-    BatchNorm2d(64),
-    AvgPool2d(3, 2),
-    Linear(64 * 4 * 4, 256),
-    ReLU(),
-    Linear(256, 11),
-)
 
 
 DATA_FOLDER = "./data/mnist"

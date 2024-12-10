@@ -1,6 +1,76 @@
 #include "../include/param_init.h"
 
+#include <algorithm>
+#include <cassert>
+#include <cmath>
+#include <numeric>
+#include <random>
+#include <tuple>
+#include <vector>
+
 #include "../include/custom_logger.h"
+
+// Function to perform orthogonal initialization
+std::vector<float> orthogonal_init(int rows, int cols, float gain) {
+    std::mt19937 gen(std::random_device{}());
+    std::normal_distribution<float> dist(0.0f, 1.0f);
+
+    // Create a matrix with random values
+    std::vector<float> matrix(rows * cols);
+    for (float& val : matrix) {
+        val = dist(gen);
+    }
+
+    // Perform Gram-Schmidt orthogonalization
+    for (int i = 0; i < cols; ++i) {
+        // Normalize the i-th column
+        float norm = 0.0f;
+        for (int j = 0; j < rows; ++j) {
+            norm += matrix[j * cols + i] * matrix[j * cols + i];
+        }
+        norm = std::sqrt(norm);
+        for (int j = 0; j < rows; ++j) {
+            matrix[j * cols + i] /= norm;
+        }
+
+        // Orthogonalize the remaining columns
+        for (int k = i + 1; k < cols; ++k) {
+            float proj = 0.0f;
+            for (int j = 0; j < rows; ++j) {
+                proj += matrix[j * cols + i] * matrix[j * cols + k];
+            }
+            for (int j = 0; j < rows; ++j) {
+                matrix[j * cols + k] -= proj * matrix[j * cols + i];
+            }
+        }
+    }
+
+    // Apply gain
+    for (float& val : matrix) {
+        val *= gain;
+    }
+
+    return matrix;
+}
+
+void test_orthogonality(const std::vector<float>& matrix, int rows, int cols) {
+    for (int i = 0; i < cols; ++i) {
+        for (int j = i + 1; j < cols; ++j) {
+            float dot_product = 0.0f;
+            for (int k = 0; k < rows; ++k) {
+                dot_product += matrix[k * cols + i] * matrix[k * cols + j];
+            }
+            assert(std::abs(dot_product) < 1e-5);  // Check orthogonality
+        }
+
+        float norm = 0.0f;
+        for (int k = 0; k < rows; ++k) {
+            norm += matrix[k * cols + i] * matrix[k * cols + i];
+        }
+        norm = std::sqrt(norm);
+        assert(std::abs(norm - 1.0f) < 1e-5);  // Check normalization
+    }
+}
 
 float he_init(float fan_in)
 
@@ -59,7 +129,7 @@ std::tuple<std::vector<float>, std::vector<float>> gaussian_param_init(
  *  */
 {
     // Get generator
-    std::mt19937 &gen = SeedManager::get_instance().get_engine();
+    std::mt19937& gen = SeedManager::get_instance().get_engine();
 
     // Initialize pointers
     std::vector<float> S(N);
@@ -97,7 +167,7 @@ std::tuple<std::vector<float>, std::vector<float>> gaussian_param_init_ni(
  *  */
 {
     // Get generator
-    std::mt19937 &gen = SeedManager::get_instance().get_engine();
+    std::mt19937& gen = SeedManager::get_instance().get_engine();
 
     // Initialize pointers
     std::vector<float> S(N);
@@ -124,28 +194,39 @@ std::tuple<std::vector<float>, std::vector<float>> gaussian_param_init_ni(
     return {m, S};
 }
 
+// Function to initialize weights and biases for a linear layer
 std::tuple<std::vector<float>, std::vector<float>, std::vector<float>,
            std::vector<float>>
-init_weight_bias_linear(const std::string &init_method, const float gain_w,
+init_weight_bias_linear(const std::string& init_method, const float gain_w,
                         const float gain_b, const int input_size,
-                        const int output_size, int num_weights, int num_biases)
-/**/
-{
+                        const int output_size, int num_weights,
+                        int num_biases) {
     float scale;
-    if (init_method.compare("Xavier") == 0 ||
-        init_method.compare("xavier") == 0) {
+    if (init_method == "Xavier" || init_method == "xavier") {
         scale = xavier_init(input_size, output_size);
-    } else if (init_method.compare("He") == 0 ||
-               init_method.compare("he") == 0) {
+    } else if (init_method == "He" || init_method == "he") {
+        scale = he_init(input_size);
+    } else if (init_method == "Orthogonal" || init_method == "orthogonal") {
         scale = he_init(input_size);
     } else {
-        LOG(LogLevel::ERROR,
-            "Initial parameter method [" + init_method + "] is not supported.");
+        std::cerr << "Initial parameter method [" << init_method
+                  << "] is not supported." << std::endl;
+        exit(1);
     }
 
-    // Initalize weights & biases
     std::vector<float> mu_w, var_w, mu_b, var_b;
-    std::tie(mu_w, var_w) = gaussian_param_init(scale, gain_w, num_weights);
+
+    if (init_method == "Orthogonal" || init_method == "orthogonal") {
+        mu_w = orthogonal_init(output_size, input_size, gain_w);
+
+        // Test orthogonality
+        test_orthogonality(mu_w, output_size, input_size);
+
+        var_w = std::vector<float>(num_weights, pow(gain_w * scale, 2));
+    } else {
+        std::tie(mu_w, var_w) = gaussian_param_init(scale, gain_w, num_weights);
+    }
+
     if (num_biases > 0) {
         std::tie(mu_b, var_b) = gaussian_param_init(scale, gain_b, num_biases);
     }
@@ -157,7 +238,7 @@ std::tuple<std::vector<float>, std::vector<float>, std::vector<float>,
            std::vector<float>>
 init_weight_bias_conv2d(const size_t kernel_size, const size_t in_channels,
                         const size_t out_channels,
-                        const std::string &init_method, const float gain_w,
+                        const std::string& init_method, const float gain_w,
                         const float gain_b, int num_weights, int num_biases)
 /*
  */
@@ -189,7 +270,7 @@ init_weight_bias_conv2d(const size_t kernel_size, const size_t in_channels,
 
 std::tuple<std::vector<float>, std::vector<float>, std::vector<float>,
            std::vector<float>>
-init_weight_bias_lstm(const std::string &init_method, const float gain_w,
+init_weight_bias_lstm(const std::string& init_method, const float gain_w,
                       const float gain_b, const int input_size,
                       const int output_size, int num_weights, int num_biases)
 /**/
