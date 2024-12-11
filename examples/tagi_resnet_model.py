@@ -7,7 +7,7 @@ from pytagi.nn import (
     ReLU,
     ResNetBlock,
     Sequential,
-    ReLU,
+    MixtureReLU,
 )
 import numpy as np
 
@@ -122,7 +122,7 @@ def resnet18_cifar10(gain_w: float = 1, gain_b: float = 1) -> Sequential:
         ResNetBlock(make_layer_block(512, 512, gain_weight=gain_w)),
     ]
 
-    final_layers = [AvgPool2d(4), Linear(512, 10, gain_weight=gain_w, gain_bias=gain_b)]
+    final_layers = [AvgPool2d(4), Linear(512, 7, gain_weight=gain_w, gain_bias=gain_b)]
 
     return Sequential(*initial_layers, *resnet_layers, *final_layers)
 

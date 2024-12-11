@@ -163,11 +163,6 @@ void OutputUpdaterCuda::update_output_delta_z(BaseHiddenStates &output_states,
     // Reset delta to zero
     cu_delta_states->reset_zeros();
 
-    // Save the original var_a in a vector
-    float *d_var_a_backup;
-    int var_a_size =
-        cu_output_states->actual_size * cu_output_states->block_size;
-
     int num_states =
         cu_output_states->actual_size * cu_output_states->block_size;
     int blocks =
@@ -189,7 +184,7 @@ void OutputUpdaterCuda::update_output_delta_z(BaseHiddenStates &output_states,
     remax_forward_cuda<<<blocks, this->num_cuda_threads>>>(
         cu_output_states->d_mu_a, cu_output_states->d_var_a, no, B,
         cu_output_states->d_mu_a, cu_output_states->d_var_a,
-        cu_output_states->d_jcb, d_var_a_backup);
+        cu_output_states->d_jcb, cu_output_states->d_jcb);
     cudaDeviceSynchronize();
 
     // Update delta
@@ -202,9 +197,6 @@ void OutputUpdaterCuda::update_output_delta_z(BaseHiddenStates &output_states,
         num_states, cu_delta_states->d_delta_mu, cu_delta_states->d_delta_var);
 
     cudaDeviceSynchronize();
-
-    // Free the backup memory
-    cudaFree(d_var_a_backup);
 }
 
 void OutputUpdaterCuda::update_selected_output_delta_z(

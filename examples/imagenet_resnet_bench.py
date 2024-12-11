@@ -296,7 +296,7 @@ def main(
     batch_size: int = 128,
     epochs: int = 5,
     device: str = "cuda",
-    sigma_v: float = 0.0,
+    sigma_v: float = 0.1,
     nb_classes = 8
 ):
     if framework == "torch":
