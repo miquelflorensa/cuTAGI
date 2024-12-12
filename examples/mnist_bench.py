@@ -18,12 +18,27 @@ from pytagi.nn import (
     Sequential,
 )
 
+import pytagi
+pytagi.manual_seed(42)
+
 TAGI_FNN = Sequential(
-    Linear(784, 1000, gain_weight=0.2, init_method="Orthogonal"),
+    Linear(784, 4096, init_method="He"),
     ReLU(),
-    Linear(1000, 1000, gain_weight=0.2, init_method="Orthogonal"),
+    Linear(4096, 4096, init_method="He"),
     ReLU(),
-    Linear(1000, 11, gain_weight=0.2, init_method="Orthogonal"),
+    Linear(4096, 4096, init_method="He"),
+    ReLU(),
+    Linear(4096, 4096, init_method="He"),
+    ReLU(),
+    Linear(4096, 4096, init_method="He"),
+    ReLU(),
+    Linear(4096, 4096, init_method="He"),
+    ReLU(),
+    Linear(4096, 4096, init_method="He"),
+    ReLU(),
+    Linear(4096, 4096, init_method="He"),
+    ReLU(),
+    Linear(4096, 11, init_method="He"),
 )
 
 
@@ -121,7 +136,7 @@ def custom_collate_fn(batch):
 
 
 def tagi_trainer(
-    batch_size: int, num_epochs: int, device: str = "cpu", sigma_v: float = 2.0
+    batch_size: int, num_epochs: int, device: str = "cpu", sigma_v: float = 0.0
 ):
     # Data loading and preprocessing
     transform = transforms.Compose(
@@ -162,6 +177,7 @@ def tagi_trainer(
     # Training
     error_rates = []
     pbar = tqdm(range(num_epochs), desc="Training Progress")
+    print_var = True
 
     for epoch in pbar:
         # count = 0
@@ -177,6 +193,15 @@ def tagi_trainer(
         for x, labels in train_loader:
             # Feedforward and backward pass
             m_pred, v_pred = net(x)
+
+            if print_var:  # Print prior predictive variance
+                print(
+                    "Prior predictive -> E[v_pred] = ",
+                    np.average(v_pred),
+                    "+-",
+                    np.std(v_pred),
+                )
+                print_var = False
 
             # Update output layers based on targets
             y, y_idx, _ = utils.label_to_obs(labels=labels, num_classes=10)

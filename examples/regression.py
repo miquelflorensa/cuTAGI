@@ -32,9 +32,9 @@ def main(num_epochs: int = 50, batch_size: int = 10, sigma_v: float = 0.2):
 
     # Network
     net = Sequential(
-        Linear(1, 50),
+        Linear(1, 50, init_method="orthogonal"),
         ReLU(),
-        Linear(50, 1),
+        Linear(50, 1, init_method="orthogonal"),
     )
     # net.to_device("cuda")
     # net.set_threads(8)

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cmath>
+#include <eigen3/Eigen/Dense>
 #include <numeric>
 #include <random>
 #include <tuple>
@@ -10,47 +11,39 @@
 
 #include "../include/custom_logger.h"
 
-// Function to perform orthogonal initialization
 std::vector<float> orthogonal_init(int rows, int cols, float gain) {
-    std::mt19937 gen(std::random_device{}());
+    // Ensure the random number generator is properly seeded
+    std::mt19937& gen = SeedManager::get_instance().get_engine();
     std::normal_distribution<float> dist(0.0f, 1.0f);
 
     // Create a matrix with random values
-    std::vector<float> matrix(rows * cols);
-    for (float& val : matrix) {
-        val = dist(gen);
+    Eigen::MatrixXf A(rows, cols);
+    for (int i = 0; i < rows; ++i) {
+        for (int j = 0; j < cols; ++j) {
+            A(i, j) = dist(gen);
+        }
     }
 
-    // Perform Gram-Schmidt orthogonalization
-    for (int i = 0; i < cols; ++i) {
-        // Normalize the i-th column
-        float norm = 0.0f;
-        for (int j = 0; j < rows; ++j) {
-            norm += matrix[j * cols + i] * matrix[j * cols + i];
-        }
-        norm = std::sqrt(norm);
-        for (int j = 0; j < rows; ++j) {
-            matrix[j * cols + i] /= norm;
-        }
+    // Perform SVD decomposition
+    Eigen::BDCSVD<Eigen::MatrixXf> svd(
+        A, Eigen::ComputeThinU | Eigen::ComputeThinV);
 
-        // Orthogonalize the remaining columns
-        for (int k = i + 1; k < cols; ++k) {
-            float proj = 0.0f;
-            for (int j = 0; j < rows; ++j) {
-                proj += matrix[j * cols + i] * matrix[j * cols + k];
-            }
-            for (int j = 0; j < rows; ++j) {
-                matrix[j * cols + k] -= proj * matrix[j * cols + i];
-            }
-        }
+    // Obtain the orthogonal matrix Q from U
+    Eigen::MatrixXf Q = svd.matrixU();
+
+    // Adjust Q to be rows x cols
+    if (rows >= cols) {
+        Q = Q.leftCols(cols);
+    } else {
+        // If rows < cols, Q is already rows x cols
     }
 
     // Apply gain
-    for (float& val : matrix) {
-        val *= gain;
-    }
+    Q *= gain;
 
-    return matrix;
+    // Convert Eigen matrix to std::vector
+    std::vector<float> result(Q.data(), Q.data() + Q.size());
+    return result;
 }
 
 void test_orthogonality(const std::vector<float>& matrix, int rows, int cols) {
@@ -217,10 +210,14 @@ init_weight_bias_linear(const std::string& init_method, const float gain_w,
     std::vector<float> mu_w, var_w, mu_b, var_b;
 
     if (init_method == "Orthogonal" || init_method == "orthogonal") {
-        mu_w = orthogonal_init(output_size, input_size, gain_w);
+        mu_w = orthogonal_init(input_size, output_size, gain_w);
 
-        // Test orthogonality
-        test_orthogonality(mu_w, output_size, input_size);
+        // std::cout << "mu_w size: " << mu_w.size() << std::endl;
+        // std::cout << "input_size * output_size: " << input_size * output_size
+        //           << std::endl;
+        // for (int i = 0; i < mu_w.size(); i++) {
+        //     std::cout << mu_w[i] << " ";
+        // }
 
         var_w = std::vector<float>(num_weights, pow(gain_w * scale, 2));
     } else {
