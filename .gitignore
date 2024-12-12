@@ -11,6 +11,8 @@ __pycache__/
 *.pyc
 pytagi.egg-info
 dist
+wandb
+nohup.out
 
 # folders
 data/cifar
