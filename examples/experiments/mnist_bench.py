@@ -272,7 +272,7 @@ def tagi_trainer_hrc(
     var_y = np.full((batch_size * metric.hrc_softmax.num_obs,), sigma_v**2, dtype=np.float32)
 
     error_rates = []
-    best_test_error_rate = float('inf')
+    best_val_error_rate = float('inf')
     no_improvement_epochs = 0
 
     pbar = tqdm(range(num_epochs), desc="Training Progress")
@@ -434,7 +434,7 @@ def tagi_trainer_remax(
     var_y = np.full((batch_size * nb_classes,), sigma_v**2, dtype=np.float32)
 
     error_rates = []
-    best_test_error_rate = float('inf')
+    best_val_error_rate = float('inf')
     no_improvement_epochs = 0
 
     pbar = tqdm(range(num_epochs), desc="Training Progress")
@@ -592,7 +592,7 @@ def torch_trainer(
 
     pbar = tqdm(range(num_epochs), desc="Training Progress")
     error_rates = []
-    best_test_error_rate = float('inf')
+    best_val_error_rate = float('inf')
     no_improvement_epochs = 0
 
     for epoch in pbar:
