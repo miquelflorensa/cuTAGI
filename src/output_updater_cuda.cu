@@ -137,9 +137,7 @@ __global__ void add_var_obs_to_var_a(float *d_var_a, const float *d_var_obs,
                                      int no, int B) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < B * no) {
-        int i = idx / no;
-        int j = idx % no;
-        d_var_a[idx] += d_var_obs[j];
+        d_var_a[idx] += d_var_obs[idx];
     }
 }
 
@@ -180,12 +178,30 @@ void OutputUpdaterCuda::update_output_delta_z(BaseHiddenStates &output_states,
         cu_output_states->d_var_a);
     cudaDeviceSynchronize();
 
-    // Remax
+    // Allocate memory for batch-wise sums
+    float *sum_mu_global, *sum_var_global;
+    cudaMalloc(&sum_mu_global, B * sizeof(float));
+    cudaMalloc(&sum_var_global, B * sizeof(float));
+    cudaMemset(sum_mu_global, 0, B * sizeof(float));
+    cudaMemset(sum_var_global, 0, B * sizeof(float));
+
+    // First phase of Remax
     remax_forward_cuda<<<blocks, this->num_cuda_threads>>>(
         cu_output_states->d_mu_a, cu_output_states->d_var_a, no, B,
         cu_output_states->d_mu_a, cu_output_states->d_var_a,
-        cu_output_states->d_jcb, cu_output_states->d_jcb);
+        cu_output_states->d_jcb, sum_mu_global, sum_var_global);
     cudaDeviceSynchronize();
+
+    // Second phase of Remax
+    compute_remax_outputs<<<blocks, this->num_cuda_threads>>>(
+        cu_output_states->d_mu_a, cu_output_states->d_var_a, no, B,
+        cu_output_states->d_mu_a, cu_output_states->d_var_a,
+        cu_output_states->d_jcb, sum_mu_global, sum_var_global);
+    cudaDeviceSynchronize();
+
+    // Free memory for batch-wise sums
+    cudaFree(sum_mu_global);
+    cudaFree(sum_var_global);
 
     // Update delta
     num_states = cu_obs->size;

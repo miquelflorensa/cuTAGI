@@ -263,6 +263,15 @@ def tagi_trainer(
         for x, labels in test_loader:
             m_pred, v_pred = net(x)
 
+            out_updater.update(
+                output_states=net.output_z_buffer,
+                mu_obs=y,
+                var_obs=var_y,
+                delta_states=net.input_delta_z_buffer,
+            )
+
+            m_pred, v_pred = net.get_outputs()
+
             # Training metric
             # error_rate = metric.error_rate(m_pred, v_pred, labels)
             # test_error_rates.append(error_rate)
@@ -369,7 +378,7 @@ def main(
     framework: str = "tagi",
     batch_size: int = 128,
     epochs: int = 10,
-    device: str = "cpu",
+    device: str = "cuda",
 ):
     if framework == "torch":
         torch_trainer(batch_size=batch_size, num_epochs=epochs, device=device)

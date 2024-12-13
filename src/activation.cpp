@@ -1179,10 +1179,6 @@ void Remax::forward(BaseHiddenStates &input_states,
                        var_logsum, cov_log_logsum, no, B, output_states.mu_a,
                        output_states.var_a, input_states.jcb);
 
-    for (int i = 0; input_states.actual_size; i++) {
-        input_states.jcb[i] = input_states.jcb[i] / input_states.var_a[i];
-    }
-
     // Save activation mean and jacobian to the class member for backward
     // pass
     this->input_size = input_states.actual_size;

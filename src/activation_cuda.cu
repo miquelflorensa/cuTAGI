@@ -691,39 +691,44 @@ void RemaxCuda::forward(BaseHiddenStates &input_states,
     HiddenStateCuda *cu_output_states =
         dynamic_cast<HiddenStateCuda *>(&output_states);
 
-    if (!cu_input_states || !cu_output_states) {
-        throw std::runtime_error("Failed to cast to CUDA objects.");
-    }
-
     int B = input_states.block_size;
     int no = input_states.actual_size / B;
 
-    unsigned int threads_per_block = min(this->num_cuda_threads, B * no);
-    unsigned int blocks = (B * no + threads_per_block - 1) / threads_per_block;
+    int num_states = no * B;
+    int blocks =
+        (num_states + this->num_cuda_threads - 1) / this->num_cuda_threads;
 
-    // Ensure that the device pointers are not null
-    if (cu_input_states->d_mu_a == nullptr ||
-        cu_input_states->d_var_a == nullptr ||
-        cu_output_states->d_mu_a == nullptr ||
-        cu_output_states->d_var_a == nullptr ||
-        cu_output_states->d_jcb == nullptr ||
-        cu_output_states->d_var_a == nullptr) {
-        throw std::runtime_error("One or more device pointers are null.");
-    }
+    // Mixture ReLU
+    mixture_relu_mean_var_cuda<<<blocks, this->num_cuda_threads>>>(
+        cu_input_states->d_mu_a, cu_input_states->d_var_a, num_states,
+        cu_input_states->d_mu_a, cu_input_states->d_jcb,
+        cu_input_states->d_var_a);
+    cudaDeviceSynchronize();
 
-    // Call the combined CUDA kernel
-    remax_forward_cuda<<<blocks, threads_per_block>>>(
+    // Allocate memory for batch-wise sums
+    float *sum_mu_global, *sum_var_global;
+    cudaMalloc(&sum_mu_global, B * sizeof(float));
+    cudaMalloc(&sum_var_global, B * sizeof(float));
+    cudaMemset(sum_mu_global, 0, B * sizeof(float));
+    cudaMemset(sum_var_global, 0, B * sizeof(float));
+
+    // First phase of Remax
+    remax_forward_cuda<<<blocks, this->num_cuda_threads>>>(
+        cu_input_states->d_mu_a, cu_input_states->d_var_a, no, B,
+        cu_input_states->d_mu_a, cu_input_states->d_var_a,
+        cu_input_states->d_jcb, sum_mu_global, sum_var_global);
+    cudaDeviceSynchronize();
+
+    // Second phase of Remax
+    compute_remax_outputs<<<blocks, this->num_cuda_threads>>>(
         cu_input_states->d_mu_a, cu_input_states->d_var_a, no, B,
         cu_output_states->d_mu_a, cu_output_states->d_var_a,
-        cu_output_states->d_jcb, cu_input_states->d_jcb);
-
-    // Synchronize and check for errors
+        cu_output_states->d_jcb, sum_mu_global, sum_var_global);
     cudaDeviceSynchronize();
-    cudaError_t err = cudaGetLastError();
-    if (err != cudaSuccess) {
-        throw std::runtime_error("remax_forward_cuda kernel failed: " +
-                                 std::string(cudaGetErrorString(err)));
-    }
+
+    // Free memory for batch-wise sums
+    cudaFree(sum_mu_global);
+    cudaFree(sum_var_global);
 
     // Update dimensions
     cu_output_states->height = cu_input_states->height;
@@ -1142,65 +1147,57 @@ __global__ void softmax_mean_var_cuda(float const *mu_z, float *var_z,
 
 __global__ void remax_forward_cuda(float *mu_m, float *var_m, int no, int B,
                                    float *mu_a, float *var_a, float *jcb,
-                                   float *cov_M_Z) {
+                                   float *sum_mu_global,
+                                   float *sum_var_global) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    // B: Batch size
-    // no: Number of outputs per mini-batch
-    // printf("B: %d, no: %d\n", B, no);
+
     if (idx < B * no) {
         int i = idx / no;  // Batch index
         int j = idx % no;  // Output index
 
-        mu_m[i * no + j] = std::max(1e-12f, mu_m[i * no + j]);
-        var_m[i * no + j] = std::max(1e-6f, var_m[i * no + j]);
+        // Ensure mu_m and var_m have minimum values
+        mu_m[idx] = fmaxf(1e-12f, mu_m[idx]);
+        var_m[idx] = fmaxf(1e-6f, var_m[idx]);
 
-        __shared__ float sum_mu[256];
-        __shared__ float sum_var[256];
+        // Compute partial sums for the batch
+        atomicAdd(&sum_mu_global[i], mu_m[idx]);
+        atomicAdd(&sum_var_global[i], var_m[idx]);
+    }
+}
 
-        // Initialize shared memory
-        if (threadIdx.x < B) {
-            sum_mu[threadIdx.x] = 0.0f;
-            sum_var[threadIdx.x] = 0.0f;
-        }
-        __syncthreads();
+__global__ void compute_remax_outputs(float *mu_m, float *var_m, int no, int B,
+                                      float *mu_a, float *var_a, float *jcb,
+                                      float *sum_mu_global,
+                                      float *sum_var_global) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
-        // Accumulate
-        atomicAdd(&sum_mu[i], mu_m[i * no + j]);
-        atomicAdd(&sum_var[i], var_m[i * no + j]);
-        __syncthreads();
+    if (idx < B * no) {
+        int i = idx / no;  // Batch index
+        int j = idx % no;  // Output index
 
-        float mu_square = mu_m[i * no + j] * mu_m[i * no + j];
-        float mu_log_square = sum_mu[i] * sum_mu[i];
-        if (mu_square < 1e-6f || std::isnan(mu_square) ||
-            std::isinf(mu_square)) {
-            mu_square = 1e-6f;
-        }
-        if (mu_log_square < 1e-6f || std::isnan(mu_log_square) ||
-            std::isinf(mu_log_square)) {
-            mu_log_square = 1e-6f;
-        }
+        float mu_square = fmaxf(mu_m[idx] * mu_m[idx], 1e-6f);
+        float mu_log_square = fmaxf(sum_mu_global[i] * sum_mu_global[i], 1e-6f);
 
-        float var_log = logf(1.0f + (var_m[i * no + j] / (mu_square)));
-        float mu_log = logf(mu_m[i * no + j]) - 0.5f * var_log;
+        float var_log = logf(1.0f + (var_m[idx] / mu_square));
+        float mu_log = logf(mu_m[idx]) - 0.5f * var_log;
 
-        float var_logsum = logf(1.0f + (sum_var[i] / mu_log_square));
-        float mu_logsum = logf(sum_mu[i]) - 0.5f * var_logsum;
+        float var_logsum = logf(1.0f + (sum_var_global[i] / mu_log_square));
+        float mu_logsum = logf(sum_mu_global[i]) - 0.5f * var_logsum;
 
-        float cov_log_logsum =
-            logf(1.0f + var_m[i * no + j] * (1.0f / sum_mu[i]) *
-                            (1.0f / mu_m[i * no + j]));
+        float cov_log_logsum = logf(
+            1.0f + var_m[idx] * (1.0f / sum_mu_global[i]) * (1.0f / mu_m[idx]));
 
         float cov_a_hat_ln_M = var_log - cov_log_logsum;
-        float cov_a_hat_M = cov_a_hat_ln_M * mu_m[i * no + j];
+        float cov_a_hat_M = cov_a_hat_ln_M * mu_m[idx];
 
         float tmp_mu = mu_log - mu_logsum;
         float tmp_var = var_log + var_logsum - 2 * cov_log_logsum;
 
         float tmp_mu_a = expf(tmp_mu + 0.5f * tmp_var);
-        mu_a[i * no + j] = tmp_mu_a;
-        var_a[i * no + j] = tmp_mu_a * tmp_mu_a * (expf(tmp_var) - 1.0f);
-        jcb[i * no + j] = expf(tmp_mu + 0.5f * tmp_var) * cov_a_hat_M /
-                          var_m[i * no + j] * cov_M_Z[i * no + j];
+        float var = var_m[idx];
+        mu_a[idx] = tmp_mu_a;
+        var_a[idx] = tmp_mu_a * tmp_mu_a * (expf(tmp_var) - 1.0f);
+        jcb[idx] = expf(tmp_mu + 0.5f * tmp_var) * cov_a_hat_M / var * jcb[idx];
     }
 }
 

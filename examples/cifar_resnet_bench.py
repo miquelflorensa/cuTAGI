@@ -226,8 +226,8 @@ def tagi_trainer(
     nb_classes = 10
 
     # Resnet18
-    net = TAGI_CNN_NET
-    # net = resnet18_cifar10(gain_w=0.1, gain_b=0.1)
+    # net = TAGI_CNN_NET
+    net = resnet18_cifar10(gain_w=0.05, gain_b=0.05)
     # net = TAGI_FNN
     net.to_device(device)
     # net.set_threads(10)
@@ -253,9 +253,9 @@ def tagi_trainer(
         for x, labels in train_loader:
             # Feedforward and backward pass
             m_pred, v_pred = net(x)
-            print("m_pred: ", m_pred)
-            for i in range(len(labels)):
-                print("sum: ", np.sum(m_pred[i * nb_classes : (i + 1) * nb_classes]))
+            # print("m_pred: ", m_pred)
+            # for i in range(len(labels)):
+            #     print("sum: ", np.sum(m_pred[i * nb_classes : (i + 1) * nb_classes]))
 
             if print_var:  # Print prior predictive variance
                 print(
@@ -289,6 +289,8 @@ def tagi_trainer(
                 delta_states=net.input_delta_z_buffer,
             )
 
+            m_pred, v_pred = net.get_outputs()
+
             # Update parameters
             net.backward()
             net.step()
@@ -310,6 +312,15 @@ def tagi_trainer(
         net.eval()
         for x, labels in test_loader:
             m_pred, v_pred = net(x)
+
+            out_updater.update(
+                output_states=net.output_z_buffer,
+                mu_obs=y,
+                var_obs=var_y,
+                delta_states=net.input_delta_z_buffer,
+            )
+
+            m_pred, v_pred = net.get_outputs()
 
             # Training metric
             # error_rate = metric.error_rate(m_pred, v_pred, labels)
@@ -398,10 +409,10 @@ def torch_trainer(batch_size: int, num_epochs: int, device: str = "cuda"):
 
 def main(
     framework: str = "tagi",
-    batch_size: int = 1,
+    batch_size: int = 128,
     epochs: int = 50,
     device: str = "cuda",
-    sigma_v: float = 0.0,
+    sigma_v: float = 0.01,
 ):
     if framework == "torch":
         torch_trainer(batch_size=batch_size, num_epochs=epochs, device=device)
