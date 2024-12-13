@@ -19,7 +19,8 @@ class OutputUpdaterCuda : public BaseOutputUpdater {
 
     void update_output_delta_z(BaseHiddenStates &output_states,
                                BaseObservation &obs,
-                               BaseDeltaStates &delta_states) override;
+                               BaseDeltaStates &delta_states, int no,
+                               int B) override;
 
     void update_selected_output_delta_z(BaseHiddenStates &output_states,
                                         BaseObservation &obs,

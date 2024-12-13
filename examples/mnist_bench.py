@@ -1,3 +1,12 @@
+# Temporary import. It will be removed in the final vserion
+import os
+import sys
+
+# Add the 'build' directory to sys.path in one line
+sys.path.append(
+    os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "build"))
+)
+
 import fire
 import numpy as np
 import torch
@@ -16,40 +25,6 @@ from pytagi.nn import (
     OutputUpdater,
     ReLU,
     Sequential,
-)
-
-TAGI_FNN = Sequential(
-    Linear(784, 4096),
-    ReLU(),
-    Linear(4096, 4096),
-    ReLU(),
-    Linear(4096, 11),
-)
-
-TAGI_CNN = Sequential(
-    Conv2d(1, 16, 4, padding=1, in_width=28, in_height=28),
-    ReLU(),
-    AvgPool2d(3, 2),
-    Conv2d(16, 32, 5),
-    ReLU(),
-    AvgPool2d(3, 2),
-    Linear(32 * 4 * 4, 256),
-    ReLU(),
-    Linear(256, 11),
-)
-
-TAGI_CNN_BATCHNORM = Sequential(
-    Conv2d(1, 32, 4, padding=1, in_width=28, in_height=28, bias=False),
-    ReLU(),
-    BatchNorm2d(32),
-    AvgPool2d(3, 2),
-    Conv2d(32, 64, 5, bias=False),
-    ReLU(),
-    BatchNorm2d(64),
-    AvgPool2d(3, 2),
-    Linear(64 * 4 * 4, 256),
-    ReLU(),
-    Linear(256, 11),
 )
 
 
@@ -146,7 +121,7 @@ def custom_collate_fn(batch):
 
 
 def tagi_trainer(
-    batch_size: int, num_epochs: int, device: str = "cpu", sigma_v: float = 2.0
+    batch_size: int, num_epochs: int, device: str = "cpu", sigma_v: float = 0.0
 ):
     # Data loading and preprocessing
     transform = transforms.Compose(
@@ -178,8 +153,39 @@ def tagi_trainer(
     utils = Utils()
 
     # Hierachical Softmax
-    metric = HRCSoftmaxMetric(num_classes=10)
-    net = TAGI_FNN
+    # metric = HRCSoftmaxMetric(num_classes=10)
+
+    import pytagi
+    pytagi.manual_seed(42)
+
+    TAGI_FNN = Sequential(
+    Linear(784, 4096),
+    ReLU(),
+    Linear(4096, 4096),
+    ReLU(),
+    Linear(4096, 10),
+    # MixtureSigmoid(),
+    # Remax(),
+    )
+
+    TAGI_CNN_BATCHNORM = Sequential(
+    Conv2d(1, 32, 4, padding=1, in_width=28, in_height=28, bias=False),
+    ReLU(),
+    BatchNorm2d(32),
+    AvgPool2d(3, 2),
+    Conv2d(32, 64, 5, bias=False),
+    ReLU(),
+    BatchNorm2d(64),
+    AvgPool2d(3, 2),
+    Linear(64 * 4 * 4, 256),
+    ReLU(),
+    Linear(256, 10),
+    # MixtureSigmoid(),
+    # Remax(),
+    )
+
+
+    net = TAGI_CNN_BATCHNORM
     net.to_device(device)
     # net.set_threads(16)
     out_updater = OutputUpdater(net.device)
@@ -192,34 +198,61 @@ def tagi_trainer(
         # count = 0
 
         # Decaying observation's variance
-        sigma_v = exponential_scheduler(
-            curr_v=sigma_v, min_v=0.1, decaying_factor=0.99, curr_iter=epoch
-        )
+        # sigma_v = exponential_scheduler(
+        #     curr_v=sigma_v, min_v=0.1, decaying_factor=0.99, curr_iter=epoch
+        # )
         var_y = np.full(
-            (batch_size * metric.hrc_softmax.num_obs,), sigma_v**2, dtype=np.float32
+            (batch_size * 10,), sigma_v**2, dtype=np.float32
         )
         net.train()
         for x, labels in train_loader:
             # Feedforward and backward pass
             m_pred, v_pred = net(x)
 
-            # Update output layers based on targets
-            y, y_idx, _ = utils.label_to_obs(labels=labels, num_classes=10)
-            out_updater.update_using_indices(
+            y = np.full((len(labels) * 10,), 0.0, dtype=np.float32)
+            # print(f"y: {y}")
+            # print(f"labels: {labels}")
+
+            for i in range(len(labels)):
+                y[i * 10 + labels[i]] = 1.0
+
+            # print(f"y: {y}")
+
+            out_updater.update(
                 output_states=net.output_z_buffer,
                 mu_obs=y,
                 var_obs=var_y,
-                selected_idx=y_idx,
                 delta_states=net.input_delta_z_buffer,
             )
+
+            m_pred, v_pred = net.get_outputs()
+            print(f"m_pred: {m_pred}")
+            print(f"Sum m_pred: {np.sum(m_pred)}")
+
+
 
             # Update parameters
             net.backward()
             net.step()
 
+            # Take m_pred with highest value as prediction for each batch
+
+            # M_m_pred, M_v_pred = mixture_relu_mean_var(m_pred, v_pred)
+            # A_m_pred, A_v_pred = compute_remax_predictions(M_m_pred, M_v_pred, len(labels))
+
+            error = 0
+            for i in range(len(labels)):
+                pred = np.argmax(m_pred[i * 10 : (i + 1) * 10])
+                if pred != labels[i]:
+                    error += 1
+                print(f"Predicted: {pred} | Actual: {labels[i]}")
+
+
+            error_rates.append(error / len(labels))
+
             # Training metric
-            error_rate = metric.error_rate(m_pred, v_pred, labels)
-            error_rates.append(error_rate)
+            # error_rate = metric.error_rate(m_pred, v_pred, labels)
+            # error_rates.append(error_rate)
 
         # Averaged error
         avg_error_rate = sum(error_rates[-100:])
@@ -231,8 +264,19 @@ def tagi_trainer(
             m_pred, v_pred = net(x)
 
             # Training metric
-            error_rate = metric.error_rate(m_pred, v_pred, labels)
-            test_error_rates.append(error_rate)
+            # error_rate = metric.error_rate(m_pred, v_pred, labels)
+            # test_error_rates.append(error_rate)
+
+            # M_m_pred, M_v_pred = mixture_relu_mean_var(m_pred, v_pred)
+            # A_m_pred, A_v_pred = compute_remax_predictions(M_m_pred, M_v_pred, len(labels))
+
+            for i in range(len(labels)):
+                pred = np.argmax(m_pred[i * 10 : (i + 1) * 10])
+                if pred != labels[i]:
+                    test_error_rates.append(1)
+                else:
+                    test_error_rates.append(0)
+                # print(f"Predicted: {pred} | Actual: {labels[i]}")
 
         test_error_rate = sum(test_error_rates) / len(test_error_rates)
         pbar.set_description(
@@ -324,8 +368,8 @@ def torch_trainer(batch_size: int, num_epochs: int, device: str = "cpu"):
 def main(
     framework: str = "tagi",
     batch_size: int = 128,
-    epochs: int = 20,
-    device: str = "cuda",
+    epochs: int = 10,
+    device: str = "cpu",
 ):
     if framework == "torch":
         torch_trainer(batch_size=batch_size, num_epochs=epochs, device=device)

@@ -656,6 +656,102 @@ std::unique_ptr<BaseLayer> SoftmaxCuda::to_host()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+/// RemaxCuda
+////////////////////////////////////////////////////////////////////////////////
+RemaxCuda::RemaxCuda() {}
+RemaxCuda::~RemaxCuda() {}
+
+std::string RemaxCuda::get_layer_info() const
+/*
+ */
+{
+    return "RemaxCuda()";
+}
+
+std::string RemaxCuda::get_layer_name() const
+/*
+ */
+{
+    return "RemaxCuda";
+}
+
+LayerType RemaxCuda::get_layer_type() const
+/*
+ */
+{
+    return LayerType::Activation;
+}
+
+void RemaxCuda::forward(BaseHiddenStates &input_states,
+                        BaseHiddenStates &output_states,
+                        BaseTempStates &temp_states) {
+    // Cast to cuda object
+    HiddenStateCuda *cu_input_states =
+        dynamic_cast<HiddenStateCuda *>(&input_states);
+    HiddenStateCuda *cu_output_states =
+        dynamic_cast<HiddenStateCuda *>(&output_states);
+
+    if (!cu_input_states || !cu_output_states) {
+        throw std::runtime_error("Failed to cast to CUDA objects.");
+    }
+
+    int B = input_states.block_size;
+    int no = input_states.actual_size / B;
+
+    unsigned int threads_per_block = min(this->num_cuda_threads, B * no);
+    unsigned int blocks = (B * no + threads_per_block - 1) / threads_per_block;
+
+    // Ensure that the device pointers are not null
+    if (cu_input_states->d_mu_a == nullptr ||
+        cu_input_states->d_var_a == nullptr ||
+        cu_output_states->d_mu_a == nullptr ||
+        cu_output_states->d_var_a == nullptr ||
+        cu_output_states->d_jcb == nullptr ||
+        cu_output_states->d_var_a == nullptr) {
+        throw std::runtime_error("One or more device pointers are null.");
+    }
+
+    // Call the combined CUDA kernel
+    remax_forward_cuda<<<blocks, threads_per_block>>>(
+        cu_input_states->d_mu_a, cu_input_states->d_var_a, no, B,
+        cu_output_states->d_mu_a, cu_output_states->d_var_a,
+        cu_output_states->d_jcb, cu_input_states->d_jcb);
+
+    // Synchronize and check for errors
+    cudaDeviceSynchronize();
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        throw std::runtime_error("remax_forward_cuda kernel failed: " +
+                                 std::string(cudaGetErrorString(err)));
+    }
+
+    // Update dimensions
+    cu_output_states->height = cu_input_states->height;
+    cu_output_states->depth = cu_input_states->depth;
+    cu_output_states->block_size = cu_input_states->block_size;
+    cu_output_states->actual_size = cu_input_states->actual_size;
+
+    if (this->input_size != input_states.actual_size) {
+        this->input_size = input_states.actual_size;
+        this->output_size = input_states.actual_size;
+    }
+
+    cu_output_states->block_size = cu_input_states->block_size;
+    cu_output_states->actual_size = cu_input_states->actual_size;
+}
+
+std::unique_ptr<BaseLayer> RemaxCuda::to_host()
+/* Transfer to cpu version
+ */
+{
+    std::unique_ptr<BaseLayer> host_layer = std::make_unique<Remax>();
+    host_layer->input_size = this->input_size;
+    host_layer->output_size = this->output_size;
+
+    return host_layer;
+}
+
+////////////////////////////////////////////////////////////////////////////////
 /// EvenExp
 ////////////////////////////////////////////////////////////////////////////////
 EvenExpCuda::EvenExpCuda() {}
@@ -881,6 +977,8 @@ __global__ void mixture_relu_mean_var_cuda(float const *mu_z,
                      tmp_mu_z * std_z * pdf_alpha +
                      (var_z[col] - tmp_mu_z * tmp_mu_z) * cdf_alpha;
         jcb[col] = cdf_alpha;
+        // cov(Z,M) = cdf_alpha * var_z
+        // jcb[col] = cdf_alpha * var_z[col];
     }
 }
 
@@ -1039,6 +1137,70 @@ __global__ void softmax_mean_var_cuda(float const *mu_z, float *var_z,
         var_a[j + output_size * i] = jcb[j + output_size * i] *
                                      (var_z[j + output_size * i] + max_var) *
                                      jcb[j + output_size * i];
+    }
+}
+
+__global__ void remax_forward_cuda(float *mu_m, float *var_m, int no, int B,
+                                   float *mu_a, float *var_a, float *jcb,
+                                   float *cov_M_Z) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    // B: Batch size
+    // no: Number of outputs per mini-batch
+    // printf("B: %d, no: %d\n", B, no);
+    if (idx < B * no) {
+        int i = idx / no;  // Batch index
+        int j = idx % no;  // Output index
+
+        mu_m[i * no + j] = std::max(1e-12f, mu_m[i * no + j]);
+        var_m[i * no + j] = std::max(1e-6f, var_m[i * no + j]);
+
+        __shared__ float sum_mu[256];
+        __shared__ float sum_var[256];
+
+        // Initialize shared memory
+        if (threadIdx.x < B) {
+            sum_mu[threadIdx.x] = 0.0f;
+            sum_var[threadIdx.x] = 0.0f;
+        }
+        __syncthreads();
+
+        // Accumulate
+        atomicAdd(&sum_mu[i], mu_m[i * no + j]);
+        atomicAdd(&sum_var[i], var_m[i * no + j]);
+        __syncthreads();
+
+        float mu_square = mu_m[i * no + j] * mu_m[i * no + j];
+        float mu_log_square = sum_mu[i] * sum_mu[i];
+        if (mu_square < 1e-6f || std::isnan(mu_square) ||
+            std::isinf(mu_square)) {
+            mu_square = 1e-6f;
+        }
+        if (mu_log_square < 1e-6f || std::isnan(mu_log_square) ||
+            std::isinf(mu_log_square)) {
+            mu_log_square = 1e-6f;
+        }
+
+        float var_log = logf(1.0f + (var_m[i * no + j] / (mu_square)));
+        float mu_log = logf(mu_m[i * no + j]) - 0.5f * var_log;
+
+        float var_logsum = logf(1.0f + (sum_var[i] / mu_log_square));
+        float mu_logsum = logf(sum_mu[i]) - 0.5f * var_logsum;
+
+        float cov_log_logsum =
+            logf(1.0f + var_m[i * no + j] * (1.0f / sum_mu[i]) *
+                            (1.0f / mu_m[i * no + j]));
+
+        float cov_a_hat_ln_M = var_log - cov_log_logsum;
+        float cov_a_hat_M = cov_a_hat_ln_M * mu_m[i * no + j];
+
+        float tmp_mu = mu_log - mu_logsum;
+        float tmp_var = var_log + var_logsum - 2 * cov_log_logsum;
+
+        float tmp_mu_a = expf(tmp_mu + 0.5f * tmp_var);
+        mu_a[i * no + j] = tmp_mu_a;
+        var_a[i * no + j] = tmp_mu_a * tmp_mu_a * (expf(tmp_var) - 1.0f);
+        jcb[i * no + j] = expf(tmp_mu + 0.5f * tmp_var) * cov_a_hat_M /
+                          var_m[i * no + j] * cov_M_Z[i * no + j];
     }
 }
 

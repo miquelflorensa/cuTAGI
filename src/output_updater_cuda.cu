@@ -1,3 +1,4 @@
+#include "../include/activation_cuda.cuh"
 #include "../include/output_updater_cuda.cuh"
 
 __global__ void update_delta_z_using_indices_cuda(
@@ -32,7 +33,8 @@ __global__ void update_delta_z_cuda(float const *mu_a, float const *var_a,
     float zero_pad = 0;
     float tmp = 0;
     if (col < size) {
-        tmp = jcb[col] / (var_a[col] + var_obs[col]);
+        // tmp = jcb[col] / (var_a[col] + var_obs[col]);
+        tmp = jcb[col] / (var_a[col]);
         if (isinf(tmp) || isnan(tmp)) {
             delta_mu[col] = zero_pad;
             delta_var[col] = zero_pad;
@@ -131,12 +133,20 @@ void OutputUpdaterCuda::set_num_cuda_threads(unsigned int num_threads) {
     this->num_cuda_threads = num_threads;
 }
 
+__global__ void add_var_obs_to_var_a(float *d_var_a, const float *d_var_obs,
+                                     int no, int B) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < B * no) {
+        int i = idx / no;
+        int j = idx % no;
+        d_var_a[idx] += d_var_obs[j];
+    }
+}
+
 void OutputUpdaterCuda::update_output_delta_z(BaseHiddenStates &output_states,
                                               BaseObservation &obs,
-                                              BaseDeltaStates &delta_states)
-/*
- */
-{
+                                              BaseDeltaStates &delta_states,
+                                              int no, int B) {
     // Cast to cuda object
     HiddenStateCuda *cu_output_states =
         dynamic_cast<HiddenStateCuda *>(&output_states);
@@ -153,15 +163,40 @@ void OutputUpdaterCuda::update_output_delta_z(BaseHiddenStates &output_states,
     // Reset delta to zero
     cu_delta_states->reset_zeros();
 
-    // Kernel
-    int num_states = cu_obs->size;
+    // B: Batch size
+    // no: Number of outputs per mini-batch
+
+    int num_states = no * B;
     int blocks =
         (num_states + this->num_cuda_threads - 1) / this->num_cuda_threads;
+
+    add_var_obs_to_var_a<<<blocks, this->num_cuda_threads>>>(
+        cu_output_states->d_var_a, cu_obs->d_var_obs, no, B);
+
+    // Mixture ReLU
+    mixture_relu_mean_var_cuda<<<blocks, this->num_cuda_threads>>>(
+        cu_output_states->d_mu_a, cu_output_states->d_var_a, num_states,
+        cu_output_states->d_mu_a, cu_output_states->d_jcb,
+        cu_output_states->d_var_a);
+    cudaDeviceSynchronize();
+
+    // Remax
+    remax_forward_cuda<<<blocks, this->num_cuda_threads>>>(
+        cu_output_states->d_mu_a, cu_output_states->d_var_a, no, B,
+        cu_output_states->d_mu_a, cu_output_states->d_var_a,
+        cu_output_states->d_jcb, cu_output_states->d_jcb);
+    cudaDeviceSynchronize();
+
+    // Update delta
+    num_states = cu_obs->size;
+    blocks = (num_states + this->num_cuda_threads - 1) / this->num_cuda_threads;
 
     update_delta_z_cuda<<<blocks, this->num_cuda_threads>>>(
         cu_output_states->d_mu_a, cu_output_states->d_var_a,
         cu_output_states->d_jcb, cu_obs->d_mu_obs, cu_obs->d_var_obs,
         num_states, cu_delta_states->d_delta_mu, cu_delta_states->d_delta_var);
+
+    cudaDeviceSynchronize();
 }
 
 void OutputUpdaterCuda::update_selected_output_delta_z(

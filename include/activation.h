@@ -93,6 +93,26 @@ void softmax_mean_var(std::vector<float> &mu_z, std::vector<float> &var_z,
                       int no, int batch_size, std::vector<float> &mu_a,
                       std::vector<float> &jcb, std::vector<float> &var_a);
 
+void to_log(std::vector<float> &mu_m, std::vector<float> &var_m, int no, int B,
+            std::vector<float> &mu_log, std::vector<float> &var_log);
+
+void sum_class_hidden_states(std::vector<float> &mu_m,
+                             std::vector<float> &var_m, int no, int B,
+                             std::vector<float> &mu_sum,
+                             std::vector<float> &var_sum);
+
+void compute_cov_log_logsum(std::vector<float> &mu_m, std::vector<float> &var_m,
+                            std::vector<float> &mu_sum, int no, int B,
+                            std::vector<float> &cov_log_logsum);
+
+void compute_remax_prob(std::vector<float> &mu_m, std::vector<float> &mu_log,
+                        std::vector<float> &var_log,
+                        std::vector<float> &mu_logsum,
+                        std::vector<float> &var_logsum,
+                        std::vector<float> &cov_log_logsum, int no, int B,
+                        std::vector<float> &mu_a, std::vector<float> &var_a,
+                        std::vector<float> &jcb);
+
 void even_exp_mean_var(std::vector<float> const &mu_z,
                        std::vector<float> const &var_z,
                        std::vector<float> &jcb_z, int start_chunk,
@@ -505,41 +525,29 @@ class Softmax : public BaseLayer {
 ////////////////////////////////////////////////////////////////////////////////
 /// Remax
 ////////////////////////////////////////////////////////////////////////////////
-class RemaxA : public BaseLayer {
+class Remax : public BaseLayer {
    public:
     float alpha = 0.1f;
-    RemaxA();
-    ~RemaxA();
+    Remax();
+    ~Remax();
+
+    // Delete copy constructor and copy assignment
+    Remax(const Remax &) = delete;
+    Remax &operator=(const Remax &) = delete;
+
+    // Optionally implement move constructor and move assignment
+    Remax(Remax &&) = default;
+    Remax &operator=(Remax &&) = default;
 
     std::string get_layer_info() const override;
 
     std::string get_layer_name() const override;
 
-    // TODO: How to add mixture relu
-    void to_log(std::vector<float> &mu_m, std::vector<float> &var_m, int no,
-                int B, std::vector<float> &mu_log, std::vector<float> &var_log);
-
-    void sum_class_hidden_states(std::vector<float> &mu_m,
-                                 std::vector<float> &var_m, int no, int B,
-                                 std::vector<float> &mu_sum,
-                                 std::vector<float> &var_sum);
-
-    void compute_cov_log_logsum(std::vector<float> &mu_m,
-                                std::vector<float> &var_m,
-                                std::vector<float> &mu_sum, int no, int B,
-                                std::vector<float> &cov_log_logsum);
-
-    void compute_remax_prob(std::vector<float> &mu_log,
-                            std::vector<float> &var_log,
-                            std::vector<float> &mu_logsum,
-                            std::vector<float> &var_logsum,
-                            std::vector<float> &cov_log_logsum, int no, int B,
-                            std::vector<float> &mu_a,
-                            std::vector<float> &var_a);
+    LayerType get_layer_type() const override;
 
     void forward(BaseHiddenStates &input_states,
                  BaseHiddenStates &output_states,
-                 BaseTempStates &temp_states) override {};
+                 BaseTempStates &temp_states) override;
 
     using BaseLayer::backward;
 
@@ -552,6 +560,10 @@ class RemaxA : public BaseLayer {
     void save(std::ofstream &file) override {};
 
     void load(std::ifstream &file) override {};
+
+#ifdef USE_CUDA
+    std::unique_ptr<BaseLayer> to_cuda() override;
+#endif
 };
 
 ////////////////////////////////////////////////////////////////////////////////
