@@ -316,7 +316,7 @@ def tagi_trainer(
             out_updater.update(
                 output_states=net.output_z_buffer,
                 mu_obs=y,
-                var_obs=var_y,
+                var_obs=np.full((len(labels) * nb_classes), 0, dtype=np.float32),
                 delta_states=net.input_delta_z_buffer,
             )
 
