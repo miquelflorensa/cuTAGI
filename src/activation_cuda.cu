@@ -1156,7 +1156,7 @@ __global__ void remax_forward_cuda(float *mu_m, float *var_m, int no, int B,
         int j = idx % no;  // Output index
 
         // Ensure mu_m and var_m have minimum values
-        mu_m[idx] = fmaxf(1e-12f, mu_m[idx]);
+        // mu_m[idx] = fmaxf(1e-12f, mu_m[idx]);
         var_m[idx] = fmaxf(1e-6f, var_m[idx]);
 
         // Compute partial sums for the batch

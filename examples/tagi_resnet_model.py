@@ -33,7 +33,7 @@ def make_layer_block(
             gain_weight=gain_weight,
             gain_bias=gain_bias,
         ),
-        ReLU(),
+        MixtureReLU(),
         BatchNorm2d(out_c),
         Conv2d(
             out_c,
@@ -44,7 +44,7 @@ def make_layer_block(
             gain_weight=gain_weight,
             gain_bias=gain_bias,
         ),
-        ReLU(),
+        MixtureReLU(),
         BatchNorm2d(out_c),
     )
 
@@ -64,7 +64,7 @@ def resnet18_cifar10(gain_w: float = 1, gain_b: float = 1) -> Sequential:
             gain_weight=gain_w,
             gain_bias=gain_b,
         ),
-        ReLU(),
+        MixtureReLU(),
         BatchNorm2d(64),
     ]
 

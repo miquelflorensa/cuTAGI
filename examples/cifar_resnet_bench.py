@@ -15,6 +15,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 import torch.nn as nn
 import torch.optim as optim
+import pytagi
 
 from pytagi import HRCSoftmaxMetric, Utils, exponential_scheduler
 from pytagi.nn import (
@@ -225,6 +226,8 @@ def tagi_trainer(
     metric = HRCSoftmaxMetric(num_classes=10)
     nb_classes = 10
 
+    pytagi.manual_seed(17)
+
     # Resnet18
     # net = TAGI_CNN_NET
     net = resnet18_cifar10(gain_w=0.05, gain_b=0.05)
@@ -244,12 +247,9 @@ def tagi_trainer(
         error_rates = []
         net.train()
         # Decaying observation's variance
-        sigma_v = exponential_scheduler(
-            curr_v=sigma_v, min_v=0.1, decaying_factor=0.99, curr_iter=epoch
-        )
-        var_y = np.full(
-            (batch_size * nb_classes,), sigma_v**2, dtype=np.float32
-        )
+        # sigma_v = exponential_scheduler(
+        #     curr_v=sigma_v, min_v=0.1, decaying_factor=0.99, curr_iter=epoch
+        # )
         for x, labels in train_loader:
             # Feedforward and backward pass
             m_pred, v_pred = net(x)
@@ -265,7 +265,8 @@ def tagi_trainer(
                     np.std(v_pred),
                 )
                 print_var = False
-
+            # print("len labels: ", len(labels))
+            # print("batch size: ", batch_size)
             # Update output layers based on targets
             # y, y_idx, _ = utils.label_to_obs(labels=labels, num_classes=10)
             # out_updater.update_using_indices(
@@ -275,12 +276,19 @@ def tagi_trainer(
             #     selected_idx=y_idx,
             #     delta_states=net.input_delta_z_buffer,
             # )
+            var_y = np.full(
+                (len(labels) * nb_classes,), sigma_v**2, dtype=np.float32
+            )
 
             # y = np.zeros((batch_size * nb_classes), dtype=np.float32)
             y = np.full((len(labels) * nb_classes), 0, dtype=np.float32)
 
             for i in range(len(labels)):
                 y[i * nb_classes + labels[i]] = 1.0
+
+            # var_y = np.full(
+            #     (len(labels) * nb_classes,), sigma_v**2, dtype=np.float32
+            # )
 
             out_updater.update(
                 output_states=net.output_z_buffer,
@@ -315,7 +323,7 @@ def tagi_trainer(
 
             out_updater.update(
                 output_states=net.output_z_buffer,
-                mu_obs=y,
+                mu_obs=np.full((len(labels) * nb_classes), 0, dtype=np.float32),
                 var_obs=np.full((len(labels) * nb_classes), 0, dtype=np.float32),
                 delta_states=net.input_delta_z_buffer,
             )
@@ -410,9 +418,9 @@ def torch_trainer(batch_size: int, num_epochs: int, device: str = "cuda"):
 def main(
     framework: str = "tagi",
     batch_size: int = 128,
-    epochs: int = 50,
+    epochs: int = 20,
     device: str = "cuda",
-    sigma_v: float = 0.01,
+    sigma_v: float = 0.05,
 ):
     if framework == "torch":
         torch_trainer(batch_size=batch_size, num_epochs=epochs, device=device)

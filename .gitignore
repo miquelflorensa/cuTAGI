@@ -29,7 +29,7 @@ test_model/
 *ncu-rep
 *sys-rep
 *sqlite
-
+*.out
 
 !test/data/*.csv
 !test/act_func/data/*.csv
