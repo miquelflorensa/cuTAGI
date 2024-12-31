@@ -37,29 +37,35 @@ torch.manual_seed(17)
 NORMALIZATION_MEAN = [0.4914, 0.4822, 0.4465]
 NORMALIZATION_STD = [0.2470, 0.2435, 0.2616]
 
-TAGI_CNN_NET = Sequential(
+gain = 0.5
+
+import pytagi
+pytagi.manual_seed(17)
+
+CNN_NET = Sequential(
     # 32x32
-    Conv2d(3, 32, 5, bias=False, padding=2, in_width=32, in_height=32),
-    ReLU(),
+    Conv2d(3, 32, 5, bias=False, padding=2, in_width=32, in_height=32, gain_weight=gain, gain_bias=gain),
+    MixtureReLU(),
     BatchNorm2d(32),
     AvgPool2d(2, 2),
     # 16x16
-    Conv2d(32, 32, 5, bias=False, padding=2),
-    ReLU(),
+    Conv2d(32, 32, 5, bias=False, padding=2, gain_weight=gain, gain_bias=gain),
+    MixtureReLU(),
     BatchNorm2d(32),
     AvgPool2d(2, 2),
     # 8x8
-    Conv2d(32, 64, 5, bias=False, padding=2),
-    ReLU(),
+    Conv2d(32, 64, 5, bias=False, padding=2, gain_weight=gain, gain_bias=gain),
+    MixtureReLU(),
     BatchNorm2d(64),
     AvgPool2d(2, 2),
     # 4x4
-    Linear(64 * 4 * 4, 256),
-    ReLU(),
-    Linear(256, 128),
-    ReLU(),
-    Linear(128, 10),
+    Linear(64 * 4 * 4, 256, gain_weight=gain, gain_bias=gain),
+    MixtureReLU(),
+    Linear(256, 128, gain_weight=gain, gain_bias=gain),
+    MixtureReLU(),
+    Linear(128, 10, gain_weight=gain, gain_bias=gain),
 )
+
 
 TAGI_FNN = Sequential(
     Linear(32 * 32 * 3, 4096),
@@ -226,10 +232,8 @@ def tagi_trainer(
     metric = HRCSoftmaxMetric(num_classes=10)
     nb_classes = 10
 
-    pytagi.manual_seed(17)
-
     # Resnet18
-    # net = TAGI_CNN_NET
+    # net = CNN_NET
     net = resnet18_cifar10(gain_w=0.05, gain_b=0.05)
     # net = TAGI_FNN
     net.to_device(device)
@@ -298,6 +302,8 @@ def tagi_trainer(
             )
 
             m_pred, v_pred = net.get_outputs()
+            # print("m_pred: ", m_pred)
+            # print("v_pred: ", v_pred)
 
             # Update parameters
             net.backward()
@@ -309,7 +315,9 @@ def tagi_trainer(
 
             error = 0
             for i in range(len(labels)):
-                error += np.argmax(m_pred[i * nb_classes : (i + 1) * nb_classes]) != labels[i]
+                pred = np.argmax(m_pred[i * nb_classes : (i + 1) * nb_classes])
+                error += pred != labels[i]
+                # print(f"Predicted: {pred} | Actual: {labels[i]}")
             error_rates.append(error / batch_size)
 
         # Averaged error

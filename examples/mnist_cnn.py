@@ -6,17 +6,17 @@ import sys
 sys.path.append(
     os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "build"))
 )
-import fire
+
 import numpy as np
 import torch
-import torchvision
-import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
+from torchvision import datasets, transforms
 from tqdm import tqdm
+from scipy.stats import norm
 import matplotlib.pyplot as plt
 import uuid
 
-from pytagi import HRCSoftmaxMetric, Utils, exponential_scheduler
+
 from pytagi.nn import (
     AvgPool2d,
     BatchNorm2d,
@@ -25,30 +25,18 @@ from pytagi.nn import (
     OutputUpdater,
     ReLU,
     Sequential,
-    MixtureReLU,
 )
-from examples.tagi_resnet_model import resnet18_cifar10
-from scipy.stats import norm
-import uuid
-
-plt.rcParams.update({"font.size": 20})
-plt.rcParams.update({"figure.figsize": (10, 6)})
-plt.rc("text", usetex=True)
-plt.rc("mathtext", default="regular")
-plt.rcParams["text.latex.preamble"] = r"\usepackage{amsmath} \usepackage{amssymb}"
 
 
-def plot_image_and_class_distributions(
-    x, m, S, num_points=200, label=None, classes=None
-):
+def plot_image_and_class_distributions(x, m, S, num_points=200, label=None):
     """
-    Plot the CIFAR10 image corresponding to x alongside the normal distributions
+    Plot the MNIST image corresponding to x alongside the normal distributions
     for each class given their means and variances.
 
     Parameters
     ----------
     x : array-like
-        Flattened CIFAR10 image (3072 values).
+        Flattened MNIST image (784 values).
     m : array-like
         A list or array of mean values for each class.
     S : array-like
@@ -64,14 +52,8 @@ def plot_image_and_class_distributions(
     # Ensure variances are not too close to zero to avoid division by zero errors
     S = np.where(S < 1e-3, 1e-3, S)
 
-    # Denormalize the image
-    denormalize_mean = np.array(NORMALIZATION_MEAN).reshape(1, 1, 3)
-    denormalize_std = np.array(NORMALIZATION_STD).reshape(1, 1, 3)
-    img = x.reshape(3, 32, 32).transpose(1, 2, 0)
-    img = img * denormalize_std + denormalize_mean
-
-    # Clip the values to be in the valid range [0, 1] or [0, 255] depending on your plotting needs
-    img = np.clip(img, 0, 255)
+    # Reshape the flattened image into 28x28
+    img = x.reshape(28, 28)
 
     # Compute a suitable range for the x-axis
     x_min = np.min(m) - 3 * np.sqrt(np.max(S))
@@ -79,20 +61,14 @@ def plot_image_and_class_distributions(
     X = np.linspace(x_min, x_max, num_points)
 
     # Create subplots: one for the image, one for the distributions
-    fig, axes = plt.subplots(1, 2)
+    fig, axes = plt.subplots(1, 2, figsize=(12, 6))
 
     # Plot the image on the left
     ax_img = axes[0]
-    ax_img.imshow(img)
-    ax_img.set_title("CIFAR10 Image")
+    ax_img.imshow(img, cmap="gray", interpolation="nearest")
+    ax_img.set_title("MNIST Image")
     if label is not None:
-        ax_img.text(
-            0.5,
-            -0.1,
-            f"Label: {classes[label]}",
-            ha="center",
-            transform=ax_img.transAxes,
-        )
+        ax_img.text(0.5, -0.1, f"Label: {label}", size=12, ha="center", transform=ax_img.transAxes)
     ax_img.axis("off")  # Hide axis ticks for image
 
     # Plot the distributions on the right
@@ -100,121 +76,80 @@ def plot_image_and_class_distributions(
     for i, (mean, var) in enumerate(zip(m, S)):
         std = np.sqrt(var)
         y = norm.pdf(X, mean, std)
-        ax_dist.plot(X, y, label=f"{classes[i]}", alpha=0.6)
+        ax_dist.plot(X, y, label=f"Digit {i})", alpha=0.6)
 
     predicted_label = np.argmax(m)
-    ax_dist.set_title(
-        f"Predicted: {classes[predicted_label]}"
-    )
+    ax_dist.set_title(f"Class Probability Distributions (Predicted: {predicted_label})")
     ax_dist.set_xlabel("Value")
     ax_dist.set_ylabel("Density")
-    ax_dist.legend(prop={'size': 16})
+    ax_dist.legend()
     ax_dist.grid(True)
 
     plt.tight_layout()
 
-    # Save the plot
+    # save the plot
     # Ensure the output directory exists
     output_dir = "./out/plots"
     os.makedirs(output_dir, exist_ok=True)
 
     # Generate a unique filename to avoid overwriting
-    unique_filename = f"density_{uuid.uuid4().hex}.pdf"
+    unique_filename = f"output_{uuid.uuid4().hex}.png"
 
     # Save the plot
-    plt.savefig(os.path.join(output_dir, unique_filename), transparent=True)
+    plt.savefig(os.path.join(output_dir, unique_filename))
 
 
-# Constants for dataset normalization
-NORMALIZATION_MEAN = (0.4914, 0.4822, 0.4465)
-NORMALIZATION_STD = (0.2023, 0.1994, 0.2010)
-
-gain = 0.5
-
-import pytagi
-pytagi.manual_seed(17)
-
-CNN_NET = Sequential(
-    # 32x32
-    Conv2d(3, 32, 5, bias=False, padding=2, in_width=32, in_height=32, gain_weight=gain, gain_bias=gain),
-    MixtureReLU(),
-    BatchNorm2d(32),
-    AvgPool2d(2, 2),
-    # 16x16
-    Conv2d(32, 32, 5, bias=False, padding=2, gain_weight=gain, gain_bias=gain),
-    MixtureReLU(),
-    BatchNorm2d(32),
-    AvgPool2d(2, 2),
-    # 8x8
-    Conv2d(32, 64, 5, bias=False, padding=2, gain_weight=gain, gain_bias=gain),
-    MixtureReLU(),
-    BatchNorm2d(64),
-    AvgPool2d(2, 2),
-    # 4x4
-    Linear(64 * 4 * 4, 256, gain_weight=gain, gain_bias=gain),
-    MixtureReLU(),
-    Linear(256, 128, gain_weight=gain, gain_bias=gain),
-    MixtureReLU(),
-    Linear(128, 10, gain_weight=gain, gain_bias=gain),
-)
+DATA_FOLDER = "./data/mnist"
 
 
 def custom_collate_fn(batch):
     # batch is a list of tuples (image, label)
     batch_images, batch_labels = zip(*batch)
 
-    # Convert to a single tensor
+    # Convert to a single tensor and then to numpy
     batch_images = torch.stack(batch_images)
     batch_labels = torch.tensor(batch_labels)
 
-    # Flatten images to shape (B*C*H*W,)
-    batch_images = batch_images.reshape(-1)
-
-    # Convert to numpy arrays
-    batch_images = batch_images.numpy()
-    batch_labels = batch_labels.numpy()
+    # Flatten images and labels to 1D
+    batch_images = batch_images.numpy().reshape(len(batch_images), -1).flatten()
+    batch_labels = batch_labels.numpy().flatten()
 
     return batch_images, batch_labels
 
 
-def load_datasets(batch_size: int):
-    """Load and transform CIFAR10 training and test datasets."""
-    transform_train = transforms.Compose(
-        [
-            transforms.RandomCrop(32, padding=4),
-            transforms.RandomHorizontalFlip(p=0.5),
-            transforms.ToTensor(),
-            transforms.Normalize(NORMALIZATION_MEAN, NORMALIZATION_STD),
-        ]
+def main(
+    batch_size= 128,
+    num_epochs= 20,
+    device: str = "cuda",
+    sigma_v: float = 0,
+    train: bool = True,
+    test: bool = True,
+):
+
+    # Data loading and preprocessing
+    transform = transforms.Compose(
+        [transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))]
     )
 
-    transform_test = transforms.Compose(
-        [
-            transforms.ToTensor(),
-            transforms.Normalize(NORMALIZATION_MEAN, NORMALIZATION_STD),
-        ]
+    train_dataset = datasets.MNIST(
+        root=DATA_FOLDER, train=True, transform=transform, download=True
     )
-
-    train_set = torchvision.datasets.CIFAR10(
-        root="./data/cifar", train=True, download=True, transform=transform_train
-    )
-    test_set = torchvision.datasets.CIFAR10(
-        root="./data/cifar", train=False, download=True, transform=transform_test
-    )
-
-    # Create a subset of the test set containing 10 random images
-    test_indices = np.random.choice(len(test_set), size=10, replace=False)
-    test_subset = torch.utils.data.Subset(test_set, indices=test_indices)
-
-    label_names = test_set.classes
 
     train_loader = DataLoader(
-        train_set,
+        train_dataset,
         batch_size=batch_size,
         shuffle=True,
         num_workers=1,
         collate_fn=custom_collate_fn,
     )
+    test_dataset = datasets.MNIST(
+        root=DATA_FOLDER, train=False, transform=transform, download=True
+    )
+
+    # Create a subset of the test set containing 10 random images
+    test_indices = np.random.choice(len(test_dataset), size=20, replace=False)
+    test_subset = torch.utils.data.Subset(test_dataset, indices=test_indices)
+
     test_loader = DataLoader(
         test_subset,
         batch_size=1,
@@ -222,34 +157,26 @@ def load_datasets(batch_size: int):
         num_workers=1,
         collate_fn=custom_collate_fn,
     )
-    return train_loader, test_loader, label_names
+    print("Data loaded")
 
+    net= Sequential(
+        Conv2d(1, 32, 4, padding=1, in_width=28, in_height=28, bias=False),
+        ReLU(),
+        BatchNorm2d(32),
+        AvgPool2d(3, 2),
+        Conv2d(32, 64, 5, bias=False),
+        ReLU(),
+        BatchNorm2d(64),
+        AvgPool2d(3, 2),
+        Linear(64 * 4 * 4, 256),
+        ReLU(),
+        Linear(256, 10),
+    )
 
-def main(
-    num_epochs: int = 20,
-    batch_size: int = 128,
-    sigma_v: float = 0.05,
-    train: bool = True,
-    test: bool = True,
-):
-    """
-    Run classification training on the Cifar dataset using a custom neural model.
-
-    Parameters:
-    - num_epochs: int, number of epochs for training
-    - batch_size: int, size of the batch for training
-    """
-    utils = Utils()
-    train_loader, test_loader, label_names = load_datasets(batch_size)
-
-    # Resnet18
-    # net = resnet18_cifar10()
-    net = CNN_NET
-    net.to_device("cuda")
-    # net.set_threads(16)
+    print("network created")
+    net.to_device(device)
     out_updater = OutputUpdater(net.device)
-    # S_preds = {idx: [] for idx in range(10)}
-
+    S_preds = {idx: [] for idx in range(10)}
 
     if train:
         error_rates = []
@@ -280,7 +207,7 @@ def main(
                     delta_states=net.input_delta_z_buffer,
                 )
 
-                m_pred, v_pred = net.get_outputs()
+                # m_pred, v_pred = net.get_outputs()
                 # print(f"m_pred: {m_pred}")
                 # if epoch == num_epochs - 1:
                 #     for i in range(len(labels)):
@@ -312,15 +239,15 @@ def main(
                 # error_rate = metric.error_rate(m_pred, v_pred, labels)
                 # error_rates.append(error_rate)
 
-            pbar.set_postfix({"Error Rate": np.mean(error_rates)})
 
             if test:
                 test_error_rates = []
-                # img_idx = 0
+                img_idx = 0
                 for x, labels in test_loader:
 
                     net.eval()
                     m_pred, v_pred = net(x)
+
 
                     y = np.full((len(labels) * 10,), 0.0, dtype=np.float32)
 
@@ -339,9 +266,10 @@ def main(
                     # Append the variance corresponding to the true label
                     # S_preds[img_idx].append(np.mean(v_pred))
                     # S_preds[img_idx].append(v_pred[labels[0]])
-                    # img_idx += 1
+                    img_idx += 1
 
-                    if epoch > 10:
+
+                    if epoch > 5:
                         for i in range(10):
                             # check if m_pred are not very close to 1 and are distributed between 0 and 1
                             if m_pred.size > 0 and np.max(m_pred) < 0.8:
@@ -350,7 +278,6 @@ def main(
                                     m_pred,
                                     v_pred,
                                     label=labels[0],
-                                    classes=label_names,
                                 )
                         # stop running the whole code
                         # sys.exit()
@@ -362,7 +289,8 @@ def main(
                         else:
                             test_error_rates.append(0)
 
-                    # # plot variances
+
+                    # plot variances
                     # if epoch > 5:
                     #     print(S_preds)
                     #     for i in range(10):
@@ -373,8 +301,5 @@ def main(
                     #     plt.savefig(f"out/plots/S_pred_{epoch}.png")
                     #     plt.close()
 
-
-
-
 if __name__ == "__main__":
-    fire.Fire(main)
+    main()
