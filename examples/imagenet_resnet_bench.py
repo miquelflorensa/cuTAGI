@@ -159,7 +159,7 @@ def tagi_trainer(
     metric = HRCSoftmaxMetric(num_classes=nb_classes)
 
     # Resnet18
-    net = resnet18_imagenet(gain_w=0.10, gain_b=0.10, nb_outputs=metric.hrc_softmax.len)
+    net = resnet18_imagenet(gain_w=0.083, gain_b=1.0, nb_outputs=metric.hrc_softmax.len)
     device = "cpu" if not pytagi.cuda.is_available() else device
     net.to_device(device)
 
