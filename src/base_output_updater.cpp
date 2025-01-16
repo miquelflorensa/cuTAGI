@@ -1,5 +1,7 @@
 #include "../include/base_output_updater.h"
 
+#include "../include/activation.h"
+
 #ifdef USE_CUDA
 #include "../include/output_updater_cuda.cuh"
 #endif
@@ -253,6 +255,30 @@ void compute_delta_z_heteros_mp(std::vector<float> &mu_a,
     }
 }
 
+void compute_delta_z_remax(std::vector<float> &mu_a, std::vector<float> &var_a,
+                           std::vector<float> &jcb, std::vector<float> &obs,
+                           std::vector<float> &var_obs, int start_chunk,
+                           int end_chunk, std::vector<float> &delta_mu,
+                           std::vector<float> &delta_var)
+/*
+ */
+{
+    float zero_pad = 0;
+    float tmp = 0;
+    // We compute directely the inovation vector for output layer
+    for (int col = start_chunk; col < end_chunk; col++) {
+        // tmp = jcb[col] / (var_a[col] + var_obs[col]);
+        tmp = jcb[col] / var_a[col];
+        if (isinf(tmp) || isnan(tmp) || isnan(obs[col])) {
+            delta_mu[col] = zero_pad;
+            delta_var[col] = zero_pad;
+        } else {
+            delta_mu[col] = tmp * (obs[col] - mu_a[col]);
+            delta_var[col] = -tmp * jcb[col];
+        }
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Base Output Updater
 ////////////////////////////////////////////////////////////////////////////////
@@ -309,6 +335,64 @@ void BaseOutputUpdater::update_output_delta_z_heteros(
     compute_delta_z_heteros(
         output_states.mu_a, output_states.var_a, output_states.jcb, obs.mu_obs,
         start_chunk, end_chunk, delta_states.delta_mu, delta_states.delta_var);
+}
+
+void BaseOutputUpdater::update_output_delta_z_remax(
+    BaseHiddenStates &output_states, BaseObservation &obs,
+    BaseDeltaStates &delta_states, int no, int B)
+/*
+ */
+{
+    int start_chunk = 0;
+    int end_chunk = obs.size;
+
+    // std::cout << "no: " << no << " B: " << B << std::endl;
+
+    delta_states.reset_zeros();
+
+    // B: Batch size
+    // no: Number of outputs per mini-batch
+
+    // Add obs.var_obs to output_states.var_a
+    // For each batch, we have B outputs
+    for (int i = 0; i < B; i++) {
+        for (int j = 0; j < no; j++) {
+            output_states.var_a[i * no + j] += obs.var_obs[i * no + j];
+        }
+    }
+
+    int end_chunk_mrelu = no * B;
+
+    mixture_relu_mean_var(output_states.mu_a, output_states.var_a, start_chunk,
+                          end_chunk_mrelu, output_states.mu_a,
+                          output_states.jcb, output_states.var_a);
+
+    std::vector<float> mu_log = std::vector<float>(no * B, 0.0f);
+    std::vector<float> var_log = std::vector<float>(no * B, 0.0f);
+    std::vector<float> mu_sum = std::vector<float>(B, 0.0f);
+    std::vector<float> var_sum = std::vector<float>(B, 0.0f);
+    std::vector<float> mu_logsum = std::vector<float>(B, 0.0f);
+    std::vector<float> var_logsum = std::vector<float>(B, 0.0f);
+    std::vector<float> cov_log_logsum = std::vector<float>(no * B, 0.0f);
+
+    to_log(output_states.mu_a, output_states.var_a, no, B, mu_log, var_log);
+
+    sum_class_hidden_states(output_states.mu_a, output_states.var_a, no, B,
+                            mu_sum, var_sum);
+
+    to_log(mu_sum, var_sum, 1, B, mu_logsum, var_logsum);
+
+    compute_cov_log_logsum(output_states.mu_a, output_states.var_a, mu_sum, no,
+                           B, cov_log_logsum);
+
+    compute_remax_prob(output_states.mu_a, mu_log, var_log, mu_logsum,
+                       var_logsum, cov_log_logsum, no, B, output_states.mu_a,
+                       output_states.var_a, output_states.jcb);
+
+    compute_delta_z_remax(output_states.mu_a, output_states.var_a,
+                          output_states.jcb, obs.mu_obs, obs.var_obs,
+                          start_chunk, end_chunk, delta_states.delta_mu,
+                          delta_states.delta_var);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -383,4 +467,23 @@ void OutputUpdater::update_heteros(BaseHiddenStates &output_states,
 
     this->updater->update_output_delta_z_heteros(output_states, *this->obs,
                                                  delta_states);
+}
+
+void OutputUpdater::update_remax(BaseHiddenStates &output_states,
+                                 std::vector<float> &mu_obs,
+                                 std::vector<float> &var_obs,
+                                 BaseDeltaStates &delta_states)
+/*
+ */
+{
+    this->obs->set_obs(mu_obs, var_obs);
+    this->obs->block_size = output_states.block_size;
+    this->obs->size = mu_obs.size();
+    this->obs->actual_size = mu_obs.size() / output_states.block_size;
+
+    int B = output_states.block_size;  // Batch size
+    int no = this->obs->actual_size;   // Number of outputs per mini-batch
+
+    this->updater->update_output_delta_z_remax(output_states, *this->obs,
+                                               delta_states, no, B);
 }

@@ -49,7 +49,7 @@ TAGI_CNN_BATCHNORM = Sequential(
     AvgPool2d(3, 2),
     Linear(64 * 4 * 4, 256),
     ReLU(),
-    Linear(256, 11),
+    Linear(256, 10),
 )
 
 
@@ -146,7 +146,7 @@ def custom_collate_fn(batch):
 
 
 def tagi_trainer(
-    batch_size: int, num_epochs: int, device: str = "cpu", sigma_v: float = 2.0
+    batch_size: int, num_epochs: int, device: str = "cpu", sigma_v: float = 0.05
 ):
     # Data loading and preprocessing
     transform = transforms.Compose(
@@ -179,7 +179,8 @@ def tagi_trainer(
 
     # Hierachical Softmax
     metric = HRCSoftmaxMetric(num_classes=10)
-    net = TAGI_FNN
+    nb_classes = 10
+    net = TAGI_CNN_BATCHNORM
     net.to_device(device)
     # net.set_threads(16)
     out_updater = OutputUpdater(net.device)
@@ -192,34 +193,58 @@ def tagi_trainer(
         # count = 0
 
         # Decaying observation's variance
-        sigma_v = exponential_scheduler(
-            curr_v=sigma_v, min_v=0.1, decaying_factor=0.99, curr_iter=epoch
-        )
+        # sigma_v = exponential_scheduler(
+        #     curr_v=sigma_v, min_v=0.1, decaying_factor=0.99, curr_iter=epoch
+        # )
         var_y = np.full(
-            (batch_size * metric.hrc_softmax.num_obs,), sigma_v**2, dtype=np.float32
+            (batch_size * nb_classes,), sigma_v**2, dtype=np.float32
         )
         net.train()
         for x, labels in train_loader:
             # Feedforward and backward pass
             m_pred, v_pred = net(x)
 
+            y = np.full((len(labels) * nb_classes,), 0.0, dtype=np.float32)
+            for i in range(len(labels)):
+                y[i * nb_classes + labels[i]] = 1.0
+
             # Update output layers based on targets
-            y, y_idx, _ = utils.label_to_obs(labels=labels, num_classes=10)
-            out_updater.update_using_indices(
+            # y, y_idx, _ = utils.label_to_obs(labels=labels, num_classes=10)
+            # out_updater.update_using_indices(
+            #     output_states=net.output_z_buffer,
+            #     mu_obs=y,
+            #     var_obs=var_y,
+            #     selected_idx=y_idx,
+            #     delta_states=net.input_delta_z_buffer,
+            # )
+
+            out_updater.update_remax(
                 output_states=net.output_z_buffer,
                 mu_obs=y,
                 var_obs=var_y,
-                selected_idx=y_idx,
                 delta_states=net.input_delta_z_buffer,
             )
+
+            m_pred, v_pred = net.get_outputs()
+            print(f"m_pred: {m_pred}")
+            print(f"v_pred: {v_pred}")
+            print(f"Sum m_pred: {np.sum(m_pred)}")
 
             # Update parameters
             net.backward()
             net.step()
 
             # Training metric
-            error_rate = metric.error_rate(m_pred, v_pred, labels)
-            error_rates.append(error_rate)
+            # error_rate = metric.error_rate(m_pred, v_pred, labels)
+            # error_rates.append(error_rate)
+            error = 0
+            for i in range(len(labels)):
+                pred = np.argmax(m_pred[i * 10 : (i + 1) * 10])
+                if pred != labels[i]:
+                    error += 1
+                print(f"Predicted: {pred} | Actual: {labels[i]}")
+
+            error_rates.append(error / len(labels))
 
         # Averaged error
         avg_error_rate = sum(error_rates[-100:])
@@ -230,9 +255,26 @@ def tagi_trainer(
         for x, labels in test_loader:
             m_pred, v_pred = net(x)
 
+            out_updater.update(
+                output_states=net.output_z_buffer,
+                mu_obs=np.full((len(labels) * nb_classes), 0, dtype=np.float32),
+                var_obs=np.full((len(labels) * nb_classes), 0, dtype=np.float32),
+                delta_states=net.input_delta_z_buffer,
+            )
+
+            m_pred, v_pred = net.get_outputs()
+
             # Training metric
-            error_rate = metric.error_rate(m_pred, v_pred, labels)
-            test_error_rates.append(error_rate)
+            # error_rate = metric.error_rate(m_pred, v_pred, labels)
+            # test_error_rates.append(error_rate)
+
+            for i in range(len(labels)):
+                pred = np.argmax(m_pred[i * 10 : (i + 1) * 10])
+                if pred != labels[i]:
+                    test_error_rates.append(1)
+                else:
+                    test_error_rates.append(0)
+                print(f"Predicted: {pred} | Actual: {labels[i]}")
 
         test_error_rate = sum(test_error_rates) / len(test_error_rates)
         pbar.set_description(

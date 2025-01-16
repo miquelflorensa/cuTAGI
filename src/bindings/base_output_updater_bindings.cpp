@@ -23,5 +23,9 @@ void bind_output_updater(pybind11::module_& modo)
              pybind11::arg("output_states"), pybind11::arg("mu_obs"),
              pybind11::arg("delta_states"),
              "Updates the output given heteroscedastic noise.")
+        .def("update_remax", &OutputUpdater::update_remax,
+             pybind11::arg("output_states"), pybind11::arg("mu_obs"),
+             pybind11::arg("var_obs"), pybind11::arg("delta_states"),
+             "Updates the output with remax.")
         .def_readwrite("device", &OutputUpdater::device);
 }

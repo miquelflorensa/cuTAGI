@@ -1032,46 +1032,55 @@ std::unique_ptr<BaseLayer> Softmax::to_cuda() {
 ////////////////////////////////////////////////////////////////////////////////
 /// Remax
 ////////////////////////////////////////////////////////////////////////////////
-RemaxA::RemaxA() {}
-RemaxA::~RemaxA() {}
+Remax::Remax() {}
+Remax::~Remax() {}
 
-std::string RemaxA::get_layer_info() const
+std::string Remax::get_layer_info() const
 /*
  */
 {
-    return "RemaxA()";
+    return "Remax()";
 }
 
-std::string RemaxA::get_layer_name() const
+std::string Remax::get_layer_name() const
 /*
  */
 
 {
-    return "RemaxA";
+    return "Remax";
 }
 
-void RemaxA::to_log(std::vector<float> &mu_m, std::vector<float> &var_m, int no,
-                    int B, std::vector<float> &mu_log,
-                    std::vector<float> &var_log)
+LayerType Remax::get_layer_type() const
+/*
+ */
+{
+    return LayerType::Activation;
+}
+
+void to_log(std::vector<float> &mu_m, std::vector<float> &var_m, int no, int B,
+            std::vector<float> &mu_log, std::vector<float> &var_log)
 /*
  */
 {
     float tmp_mu, tmp_var;
     for (int i = 0; i < B; i++) {
         for (int j = 0; j < no; j++) {
-            tmp_var =
-                logf(1.0f + (var_m[i * no + j] / powf(mu_m[i * no + j], 2)));
-            tmp_mu = logf(mu_m[i * no + j]) - 0.5 * tmp_var;
-            mu_log[i * no + j] = tmp_mu;
+            float mu_square = mu_m[i * no + j] * mu_m[i * no + j];
+            if (mu_square < 1e-6f || std::isnan(mu_square) ||
+                std::isinf(mu_square)) {
+                mu_square = 1e-6f;
+            }
+            tmp_var = logf(1.0f + (var_m[i * no + j] / (mu_square)));
+            mu_log[i * no + j] = logf(mu_m[i * no + j]) - 0.5 * tmp_var;
             var_log[i * no + j] = tmp_var;
         }
     }
 }
 
-void RemaxA::sum_class_hidden_states(std::vector<float> &mu_m,
-                                     std::vector<float> &var_m, int no, int B,
-                                     std::vector<float> &mu_sum,
-                                     std::vector<float> &var_sum)
+void sum_class_hidden_states(std::vector<float> &mu_m,
+                             std::vector<float> &var_m, int no, int B,
+                             std::vector<float> &mu_sum,
+                             std::vector<float> &var_sum)
 /*
  */
 {
@@ -1088,10 +1097,9 @@ void RemaxA::sum_class_hidden_states(std::vector<float> &mu_m,
     }
 }
 
-void RemaxA::compute_cov_log_logsum(std::vector<float> &mu_m,
-                                    std::vector<float> &var_m,
-                                    std::vector<float> &mu_sum, int no, int B,
-                                    std::vector<float> &cov_log_logsum)
+void compute_cov_log_logsum(std::vector<float> &mu_m, std::vector<float> &var_m,
+                            std::vector<float> &mu_sum, int no, int B,
+                            std::vector<float> &cov_log_logsum)
 /*
  */
 {
@@ -1104,28 +1112,87 @@ void RemaxA::compute_cov_log_logsum(std::vector<float> &mu_m,
     }
 }
 
-void RemaxA::compute_remax_prob(std::vector<float> &mu_log,
-                                std::vector<float> &var_log,
-                                std::vector<float> &mu_logsum,
-                                std::vector<float> &var_logsum,
-                                std::vector<float> &cov_log_logsum, int no,
-                                int B, std::vector<float> &mu_a,
-                                std::vector<float> &var_a)
+void compute_remax_prob(std::vector<float> &mu_m, std::vector<float> &mu_log,
+                        std::vector<float> &var_log,
+                        std::vector<float> &mu_logsum,
+                        std::vector<float> &var_logsum,
+                        std::vector<float> &cov_log_logsum, int no, int B,
+                        std::vector<float> &mu_a, std::vector<float> &var_a,
+                        std::vector<float> &jcb)
 /*
  */
 {
-    float tmp_mu, tmp_var;
+    float tmp_mu, tmp_var, tmp_mu_a;
     for (int i = 0; i < B; i++) {
         for (int j = 0; j < no; j++) {
+            float cov_a_hat_ln_M =
+                var_log[i * no + j] - cov_log_logsum[i * no + j];
+            float cov_a_hat_M = cov_a_hat_ln_M * mu_m[i * no + j];
+
             tmp_mu = mu_log[i * no + j] - mu_logsum[i];
             tmp_var = var_log[i * no + j] + var_logsum[i] -
                       2 * cov_log_logsum[i * no + j];
-            mu_a[i * no + j] = expf(tmp_mu + 0.5 * tmp_var);
-            var_a[i * no + j] =
-                expf(tmp_mu + 0.5 * tmp_var) * (expf(tmp_var) - 1.0f);
+            tmp_mu_a = expf(tmp_mu + 0.5 * tmp_var);
+            float var = var_a[i * no + j];
+            mu_a[i * no + j] = tmp_mu_a;
+            var_a[i * no + j] = tmp_mu_a * tmp_mu_a * (expf(tmp_var) - 1.0f);
+            jcb[i * no + j] = expf(tmp_mu + 0.5f * tmp_var) * cov_a_hat_M /
+                              var * jcb[i * no + j];
         }
     }
 }
+
+void Remax::forward(BaseHiddenStates &input_states,
+                    BaseHiddenStates &output_states,
+                    BaseTempStates &temp_states)
+/*
+ */
+{
+    int B = input_states.block_size;        // Number of batches
+    int no = input_states.actual_size / B;  // Number of outputs per batch
+
+    std::vector<float> mu_log =
+        std::vector<float>(input_states.actual_size, 0.0f);
+    std::vector<float> var_log =
+        std::vector<float>(input_states.actual_size, 0.0f);
+    std::vector<float> mu_sum = std::vector<float>(B, 0.0f);
+    std::vector<float> var_sum = std::vector<float>(B, 0.0f);
+    std::vector<float> mu_logsum = std::vector<float>(B, 0.0f);
+    std::vector<float> var_logsum = std::vector<float>(B, 0.0f);
+    std::vector<float> cov_log_logsum =
+        std::vector<float>(input_states.actual_size, 0.0f);
+
+    to_log(input_states.mu_a, input_states.var_a, no, B, mu_log, var_log);
+
+    sum_class_hidden_states(input_states.mu_a, input_states.var_a, no, B,
+                            mu_sum, var_sum);
+
+    to_log(mu_sum, var_sum, 1, B, mu_logsum, var_logsum);
+
+    compute_cov_log_logsum(input_states.mu_a, input_states.var_a, mu_sum, no, B,
+                           cov_log_logsum);
+
+    compute_remax_prob(input_states.mu_a, mu_log, var_log, mu_logsum,
+                       var_logsum, cov_log_logsum, no, B, output_states.mu_a,
+                       output_states.var_a, input_states.jcb);
+
+    // Save activation mean and jacobian to the class member for backward
+    // pass
+    this->input_size = input_states.actual_size;
+    this->output_size = input_states.actual_size;
+
+    // Update number of actual states.
+    output_states.size = input_states.size;
+    output_states.block_size = input_states.block_size;
+    output_states.actual_size = input_states.actual_size;
+}
+
+#ifdef USE_CUDA
+std::unique_ptr<BaseLayer> Remax::to_cuda() {
+    this->device = "cuda";
+    return std::make_unique<RemaxCuda>();
+}
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 /// EvenExp

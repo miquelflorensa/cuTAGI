@@ -51,6 +51,12 @@ void compute_delta_z_heteros_mp(std::vector<float> &mu_a,
                                 std::vector<float> &delta_mu,
                                 std::vector<float> &delta_var);
 
+void compute_delta_z_remax(std::vector<float> &mu_a, std::vector<float> &var_a,
+                           std::vector<float> &jcb, std::vector<float> &obs,
+                           std::vector<float> &var_obs, int start_chunk,
+                           int end_chunk, std::vector<float> &delta_mu,
+                           std::vector<float> &delta_var);
+
 ////////////////////////////////////////////////////////////////////////////////
 // Base Output Updater
 ////////////////////////////////////////////////////////////////////////////////
@@ -71,6 +77,11 @@ class BaseOutputUpdater {
     virtual void update_output_delta_z_heteros(BaseHiddenStates &output_states,
                                                BaseObservation &obs,
                                                BaseDeltaStates &delta_states);
+
+    virtual void update_output_delta_z_remax(BaseHiddenStates &output_states,
+                                             BaseObservation &obs,
+                                             BaseDeltaStates &delta_states,
+                                             int no, int B);
 
     virtual std::string get_name() const { return "BaseOutputUpdater"; };
 };
@@ -101,4 +112,8 @@ class OutputUpdater {
     void update_heteros(BaseHiddenStates &output_states,
                         std::vector<float> &mu_obs,
                         BaseDeltaStates &delta_states);
+
+    void update_remax(BaseHiddenStates &output_states,
+                      std::vector<float> &mu_obs, std::vector<float> &var_obs,
+                      BaseDeltaStates &delta_states);
 };

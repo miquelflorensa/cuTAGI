@@ -43,6 +43,17 @@ class OutputUpdater:
     ):
         self._cpp_backend.update_heteros(output_states, mu_obs.tolist(), delta_states)
 
+    def update_remax(
+        self,
+        output_states: BaseHiddenStates,
+        mu_obs: np.ndarray,
+        var_obs: np.ndarray,
+        delta_states: BaseDeltaStates,
+    ):
+        self._cpp_backend.update_remax(
+            output_states, mu_obs.tolist(), var_obs.tolist(), delta_states
+        )
+
     @property
     def device(self) -> str:
         return self._cpp_backend.device

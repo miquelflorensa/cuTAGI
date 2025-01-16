@@ -29,5 +29,10 @@ class OutputUpdaterCuda : public BaseOutputUpdater {
                                        BaseObservation &obs,
                                        BaseDeltaStates &delta_states) override;
 
+    void update_output_delta_z_remax(BaseHiddenStates &output_states,
+                                     BaseObservation &obs,
+                                     BaseDeltaStates &delta_states, int no,
+                                     int B) override;
+
     std::string get_name() const override { return "OutputUpdaterCuda"; };
 };

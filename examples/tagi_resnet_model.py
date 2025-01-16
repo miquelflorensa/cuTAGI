@@ -131,7 +131,7 @@ def resnet18_cifar10(gain_w: float = 1, gain_b: float = 1) -> Sequential:
         ResNetBlock(make_layer_block(512, 512, gain_weight=gain_w)),
     ]
 
-    final_layers = [AvgPool2d(4), Linear(512, 11, gain_weight=gain_w, gain_bias=gain_b, init_method="orthogonal")]
+    final_layers = [AvgPool2d(4), Linear(512, 10, gain_weight=gain_w, gain_bias=gain_b, init_method="orthogonal")]
 
     return Sequential(*initial_layers, *resnet_layers, *final_layers)
 

@@ -223,6 +223,7 @@ def tagi_trainer(
 
     # Hierachical Softmax
     metric = HRCSoftmaxMetric(num_classes=10)
+    nb_classes = 10
 
     # Resnet18
     # net = TAGI_CNN_NET
@@ -233,7 +234,7 @@ def tagi_trainer(
 
     # Training
     var_y = np.full(
-        (batch_size * metric.hrc_softmax.num_obs,), sigma_v**2, dtype=np.float32
+        (batch_size * nb_classes,), sigma_v**2, dtype=np.float32
     )
     net.preinit_layer()
 
@@ -252,7 +253,7 @@ def tagi_trainer(
                 curr_v=sigma_v, min_v=0, decaying_factor=1, curr_iter=epoch
             )
             var_y = np.full(
-                (batch_size * metric.hrc_softmax.num_obs,),
+                (batch_size * nb_classes,),
                 sigma_v**2,
                 dtype=np.float32,
             )
@@ -276,22 +277,44 @@ def tagi_trainer(
                         print_var = False
 
             # Update output layers based on targets
-            y, y_idx, _ = utils.label_to_obs(labels=labels, num_classes=10)
-            out_updater.update_using_indices(
+            # y, y_idx, _ = utils.label_to_obs(labels=labels, num_classes=10)
+            # out_updater.update_using_indices(
+            #     output_states=net.output_z_buffer,
+            #     mu_obs=y,
+            #     var_obs=var_y,
+            #     selected_idx=y_idx,
+            #     delta_states=net.input_delta_z_buffer,
+            # )
+
+            y = np.full((len(labels) * nb_classes,), 0.0, dtype=np.float32)
+            for i in range(len(labels)):
+                y[i * nb_classes + labels[i]] = 1.0
+
+            out_updater.update_remax(
                 output_states=net.output_z_buffer,
                 mu_obs=y,
                 var_obs=var_y,
-                selected_idx=y_idx,
                 delta_states=net.input_delta_z_buffer,
             )
+
+            m_pred, v_pred = net.get_outputs()
 
             # Update parameters
             net.backward()
             net.step()
 
             # Training metric
-            error_rate = metric.error_rate(m_pred, v_pred, labels)
-            error_rates.append(error_rate)
+            # error_rate = metric.error_rate(m_pred, v_pred, labels)
+            # error_rates.append(error_rate)
+            error = 0
+            for i in range(len(labels)):
+                pred = np.argmax(m_pred[i * 10 : (i + 1) * 10])
+                if pred != labels[i]:
+                    error += 1
+                # print(f"Predicted: {pred} | Actual: {labels[i]}")
+
+            error_rates.append(error / len(labels))
+
 
         # Averaged error
         avg_error_rate = sum(error_rates[-100:])
@@ -302,9 +325,26 @@ def tagi_trainer(
         for x, labels in test_loader:
             m_pred, v_pred = net(x)
 
+            out_updater.update(
+                output_states=net.output_z_buffer,
+                mu_obs=y,
+                var_obs=var_y,
+                delta_states=net.input_delta_z_buffer,
+            )
+
+            m_pred, v_pred = net.get_outputs()
+
             # Training metric
-            error_rate = metric.error_rate(m_pred, v_pred, labels)
-            test_error_rates.append(error_rate)
+            # error_rate = metric.error_rate(m_pred, v_pred, labels)
+            # test_error_rates.append(error_rate)
+
+            for i in range(len(labels)):
+                pred = np.argmax(m_pred[i * 10 : (i + 1) * 10])
+                if pred != labels[i]:
+                    test_error_rates.append(1)
+                else:
+                    test_error_rates.append(0)
+                # print(f"Predicted: {pred} | Actual: {labels[i]}")
 
         test_error_rate = sum(test_error_rates) / len(test_error_rates)
         pbar.set_description(

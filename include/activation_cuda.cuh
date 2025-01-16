@@ -53,6 +53,15 @@ __global__ void softmax_mean_var_cuda(float const *mu_z, float *var_z,
                                       size_t output_size, int batch_size,
                                       float *mu_a, float *jcb, float *var_a);
 
+__global__ void remax_forward_cuda(float *mu_m, float *var_m, int no, int B,
+                                   float *mu_a, float *var_a, float *jcb,
+                                   float *sum_mu_global, float *sum_var_global);
+
+__global__ void compute_remax_outputs(float *mu_m, float *var_m, int no, int B,
+                                      float *mu_a, float *var_a, float *jcb,
+                                      float *sum_mu_global,
+                                      float *sum_var_global);
+
 __global__ void even_exp_mean_var_cuda(float const *mu_z, float const *var_z,
                                        float const *jcb_z, int num_states,
                                        float *mu_a, float *var_a, float *jcb_a);
@@ -387,6 +396,45 @@ class SoftmaxCuda : public BaseLayerCuda {
     // required for bwd_states
     SoftmaxCuda(SoftmaxCuda &&) = default;
     SoftmaxCuda &operator=(SoftmaxCuda &&) = default;
+
+    std::string get_layer_info() const override;
+
+    std::string get_layer_name() const override;
+
+    LayerType get_layer_type() const override;
+
+    void forward(BaseHiddenStates &input_states,
+                 BaseHiddenStates &output_states,
+                 BaseTempStates &temp_states) override;
+
+    using BaseLayer::backward;
+
+    void allocate_param_delta() override {};
+
+    void update_weights() override {};
+
+    void update_biases() override {};
+
+    void save(std::ofstream &file) override {};
+
+    void load(std::ifstream &file) override {};
+
+    std::unique_ptr<BaseLayer> to_host() override;
+};
+
+class RemaxCuda : public BaseLayerCuda {
+   public:
+    RemaxCuda();
+    ~RemaxCuda();
+
+    // Delete copy constructor and copy assignment
+    RemaxCuda(const RemaxCuda &) = delete;
+    RemaxCuda &operator=(const RemaxCuda &) = delete;
+
+    // Optionally implement move constructor and move assignment. This is
+    // required for bwd_states
+    RemaxCuda(RemaxCuda &&) = default;
+    RemaxCuda &operator=(RemaxCuda &&) = default;
 
     std::string get_layer_info() const override;
 

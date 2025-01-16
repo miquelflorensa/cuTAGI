@@ -1,3 +1,4 @@
+#include "../include/activation_cuda.cuh"
 #include "../include/output_updater_cuda.cuh"
 
 __global__ void update_delta_z_using_indices_cuda(
@@ -125,6 +126,26 @@ __global__ void update_delta_z_cuda_heteros(float const *mu_a,
     }
 }
 
+__global__ void update_delta_z_cuda_remax(float const *mu_a, float const *var_a,
+                                          float const *jcb, float const *obs,
+                                          float const *var_obs, int size,
+                                          float *delta_mu, float *delta_var) {
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+    float zero_pad = 0;
+    float tmp = 0;
+    if (col < size) {
+        // tmp = jcb[col] / (var_a[col] + var_obs[col]);
+        tmp = jcb[col] / var_a[col];
+        if (isinf(tmp) || isnan(tmp)) {
+            delta_mu[col] = zero_pad;
+            delta_var[col] = zero_pad;
+        } else {
+            delta_mu[col] = tmp * (obs[col] - mu_a[col]);
+            delta_var[col] = -tmp * jcb[col];
+        }
+    }
+}
+
 OutputUpdaterCuda::OutputUpdaterCuda() {}
 
 void OutputUpdaterCuda::set_num_cuda_threads(unsigned int num_threads) {
@@ -231,4 +252,97 @@ void OutputUpdaterCuda::update_output_delta_z_heteros(
         cu_output_states->d_mu_a, cu_output_states->d_var_a,
         cu_output_states->d_jcb, cu_obs->d_mu_obs, num_states,
         cu_delta_states->d_delta_mu, cu_delta_states->d_delta_var);
+}
+
+__global__ void add_var_obs_to_var_a(float *d_var_a, const float *d_var_obs,
+                                     int no, int B) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < B * no) {
+        d_var_a[idx] += d_var_obs[idx];
+    }
+}
+
+void OutputUpdaterCuda::update_output_delta_z_remax(
+    BaseHiddenStates &output_states, BaseObservation &obs,
+    BaseDeltaStates &delta_states, int no, int B) {
+    // Cast to cuda object
+    HiddenStateCuda *cu_output_states =
+        dynamic_cast<HiddenStateCuda *>(&output_states);
+    ObservationCuda *cu_obs = dynamic_cast<ObservationCuda *>(&obs);
+    DeltaStateCuda *cu_delta_states =
+        dynamic_cast<DeltaStateCuda *>(&delta_states);
+
+    if (cu_obs->d_mu_obs == nullptr) {
+        cu_obs->allocate_memory();
+    }
+
+    cu_obs->to_device();
+
+    // Reset delta to zero
+    cu_delta_states->reset_zeros();
+
+    // B: Batch size
+    // no: Number of outputs per mini-batch
+
+    int num_states = no * B;
+    int blocks =
+        (num_states + this->num_cuda_threads - 1) / this->num_cuda_threads;
+
+    add_var_obs_to_var_a<<<blocks, this->num_cuda_threads>>>(
+        cu_output_states->d_var_a, cu_obs->d_var_obs, no, B);
+
+    // Mixture ReLU
+    mixture_relu_mean_var_cuda<<<blocks, this->num_cuda_threads>>>(
+        cu_output_states->d_mu_a, cu_output_states->d_var_a, num_states,
+        cu_output_states->d_mu_a, cu_output_states->d_jcb,
+        cu_output_states->d_var_a);
+
+    // Even-exp
+    // even_exp_mean_var_cuda<<<blocks, this->num_cuda_threads>>>(
+    //     cu_output_states->d_mu_a, cu_output_states->d_var_a,
+    //     cu_output_states->d_jcb, num_states, cu_output_states->d_mu_a,
+    //     cu_output_states->d_var_a, cu_output_states->d_jcb);
+
+    // Softplus
+    // softplus_mean_var_cuda<<<blocks, this->num_cuda_threads>>>(
+    //     cu_output_states->d_mu_a, cu_output_states->d_var_a, num_states,
+    //     cu_output_states->d_mu_a, cu_output_states->d_jcb,
+    //     cu_output_states->d_var_a);
+    cudaDeviceSynchronize();
+
+    // Allocate memory for batch-wise sums
+    float *sum_mu_global, *sum_var_global;
+    cudaMalloc(&sum_mu_global, B * sizeof(float));
+    cudaMalloc(&sum_var_global, B * sizeof(float));
+    cudaMemset(sum_mu_global, 0, B * sizeof(float));
+    cudaMemset(sum_var_global, 0, B * sizeof(float));
+
+    // First phase of Remax
+    remax_forward_cuda<<<blocks, this->num_cuda_threads>>>(
+        cu_output_states->d_mu_a, cu_output_states->d_var_a, no, B,
+        cu_output_states->d_mu_a, cu_output_states->d_var_a,
+        cu_output_states->d_jcb, sum_mu_global, sum_var_global);
+    cudaDeviceSynchronize();
+
+    // Second phase of Remax
+    compute_remax_outputs<<<blocks, this->num_cuda_threads>>>(
+        cu_output_states->d_mu_a, cu_output_states->d_var_a, no, B,
+        cu_output_states->d_mu_a, cu_output_states->d_var_a,
+        cu_output_states->d_jcb, sum_mu_global, sum_var_global);
+    cudaDeviceSynchronize();
+
+    // Free memory for batch-wise sums
+    cudaFree(sum_mu_global);
+    cudaFree(sum_var_global);
+
+    // Update delta
+    num_states = cu_obs->size;
+    blocks = (num_states + this->num_cuda_threads - 1) / this->num_cuda_threads;
+
+    update_delta_z_cuda_remax<<<blocks, this->num_cuda_threads>>>(
+        cu_output_states->d_mu_a, cu_output_states->d_var_a,
+        cu_output_states->d_jcb, cu_obs->d_mu_obs, cu_obs->d_var_obs,
+        num_states, cu_delta_states->d_delta_mu, cu_delta_states->d_delta_var);
+
+    cudaDeviceSynchronize();
 }
