@@ -1,0 +1,21 @@
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/mf/Documents/miquel/3/cuTAGI/examples/imagenet_resnet_bench.py", line 468, in <module>
+    fire.Fire(main)
+  File "/home/mf/miniconda3/envs/cuTAGI/lib/python3.11/site-packages/fire/core.py", line 141, in Fire
+    component_trace = _Fire(component, args, parsed_flag_args, context, name)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mf/miniconda3/envs/cuTAGI/lib/python3.11/site-packages/fire/core.py", line 475, in _Fire
+    component, remaining_args = _CallAndUpdateTrace(
+                                ^^^^^^^^^^^^^^^^^^^^
+  File "/home/mf/miniconda3/envs/cuTAGI/lib/python3.11/site-packages/fire/core.py", line 691, in _CallAndUpdateTrace
+    component = fn(*varargs, **kwargs)
+                ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mf/Documents/miquel/3/cuTAGI/examples/imagenet_resnet_bench.py", line 456, in main
+    tagi_trainer(
+  File "/home/mf/Documents/miquel/3/cuTAGI/examples/imagenet_resnet_bench.py", line 168, in tagi_trainer
+    net.preinit_layer()
+  File "/home/mf/Documents/miquel/3/cuTAGI/pytagi/nn/sequential.py", line 172, in preinit_layer
+    self._cpp_backend.preinit_layer()
+KeyboardInterrupt

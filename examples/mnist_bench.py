@@ -16,6 +16,9 @@ from pytagi.nn import (
     OutputUpdater,
     ReLU,
     Sequential,
+    MixtureTanh,
+    MixtureReLU,
+    Tanh,
 )
 
 TAGI_FNN = Sequential(
@@ -146,7 +149,7 @@ def custom_collate_fn(batch):
 
 
 def tagi_trainer(
-    batch_size: int, num_epochs: int, device: str = "cpu", sigma_v: float = 0.05
+    batch_size: int, num_epochs: int, device: str = "cpu", sigma_v: float = 0.0
 ):
     # Data loading and preprocessing
     transform = transforms.Compose(
@@ -204,7 +207,7 @@ def tagi_trainer(
             # Feedforward and backward pass
             m_pred, v_pred = net(x)
 
-            y = np.full((len(labels) * nb_classes,), -1.0, dtype=np.float32)
+            y = np.full((len(labels) * nb_classes,), 0.0, dtype=np.float32)
             for i in range(len(labels)):
                 y[i * nb_classes + labels[i]] = 1.0
 
@@ -218,28 +221,31 @@ def tagi_trainer(
             #     delta_states=net.input_delta_z_buffer,
             # )
 
-            out_updater.update(
+            # out_updater.update(
+            #     output_states=net.output_z_buffer,
+            #     mu_obs=y,
+            #     var_obs=var_y,
+            #     delta_states=net.input_delta_z_buffer,
+            # )
+
+
+            out_updater.update_remax(
                 output_states=net.output_z_buffer,
                 mu_obs=y,
                 var_obs=var_y,
                 delta_states=net.input_delta_z_buffer,
             )
 
+            print(f"mZ: {m_pred}")
+            print(f"vZ: {v_pred}")
+            m_pred, v_pred = net.get_outputs()
+            print(f"mA: {m_pred}")
+            print(f"vA: {v_pred}")
+            print(f"Sum m_pred: {np.sum(m_pred)}")
+
             # Update parameters
             net.backward()
             net.step()
-
-            out_updater.update_remax(
-                output_states=net.output_z_buffer,
-                mu_obs=y,
-                var_obs=np.full((len(labels) * nb_classes), 0, dtype=np.float32),
-                delta_states=net.input_delta_z_buffer,
-            )
-
-            # m_pred, v_pred = net.get_outputs()
-            # print(f"m_pred: {m_pred}")
-            # print(f"v_pred: {v_pred}")
-            # print(f"Sum m_pred: {np.sum(m_pred)}")
 
             # Training metric
             # error_rate = metric.error_rate(m_pred, v_pred, labels)

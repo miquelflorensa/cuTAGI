@@ -1,0 +1,146 @@
+Files already downloaded and verified
+Files already downloaded and verified
+Training Progress:   0%|          | 0/50 [00:00<?, ?it/s]
+
+Conv2dCuda.0 E[ mu_w]±std:  0.10051238742511891  ±  0.12491971625450562
+Conv2dCuda.0 E[std_w]±std:  0.015973357797909118  ±  0.0
+LinearCuda.12 E[ mu_w]±std:  0.03536646979762139  ±  0.04419248912820504
+LinearCuda.12 E[std_w]±std:  0.0036681161979222826  ±  0.0
+
+
+Prior predictive -> E[v_pred] =  0.13512938  | E[s_pred] 0.36659
+                 -> V[m_pred] =  0.116824284  | s[m_pred] 0.34179568
+Epoch 1/50 | training error: 72.72% | test error: 75.82%:   0%|          | 0/50 [03:35<?, ?it/s]Epoch 1/50 | training error: 72.72% | test error: 75.82%:   2%|▏         | 1/50 [03:35<2:56:02, 215.56s/it]
+
+Conv2dCuda.0 E[ mu_w]±std:  0.10609109263744661  ±  0.13255882926892198
+Conv2dCuda.0 E[std_w]±std:  0.0016142692690070029  ±  0.0009726947445079139
+LinearCuda.12 E[ mu_w]±std:  0.01221472043906644  ±  0.01880379784610011
+LinearCuda.12 E[std_w]±std:  0.0007170863407914339  ±  0.00017431022232776173
+
+
+Epoch 2/50 | training error: 42.21% | test error: 68.69%:   2%|▏         | 1/50 [07:11<2:56:02, 215.56s/it]Epoch 2/50 | training error: 42.21% | test error: 68.69%:   4%|▍         | 2/50 [07:11<2:52:37, 215.78s/it]
+
+Conv2dCuda.0 E[ mu_w]±std:  0.10773500052952538  ±  0.13475273069803748
+Conv2dCuda.0 E[std_w]±std:  0.001413851273270475  ±  0.0008105714623758472
+LinearCuda.12 E[ mu_w]±std:  0.011021959454321717  ±  0.018209740062906148
+LinearCuda.12 E[std_w]±std:  0.0002006222339620824  ±  9.926259958406347e-05
+
+
+Epoch 3/50 | training error: 29.51% | test error: 43.13%:   4%|▍         | 2/50 [10:48<2:52:37, 215.78s/it]Epoch 3/50 | training error: 29.51% | test error: 43.13%:   6%|▌         | 3/50 [10:48<2:49:32, 216.45s/it]
+
+Conv2dCuda.0 E[ mu_w]±std:  0.10974833495368295  ±  0.13768258419243676
+Conv2dCuda.0 E[std_w]±std:  0.0013946302083206968  ±  0.000787483992763247
+LinearCuda.12 E[ mu_w]±std:  0.011290039868497637  ±  0.018595477455776863
+LinearCuda.12 E[std_w]±std:  0.00012703251200362858  ±  7.551117503038235e-05
+
+
+Epoch 4/50 | training error: 24.45% | test error: 35.10%:   6%|▌         | 3/50 [14:22<2:49:32, 216.45s/it]Epoch 4/50 | training error: 24.45% | test error: 35.10%:   8%|▊         | 4/50 [14:22<2:45:05, 215.33s/it]
+
+Conv2dCuda.0 E[ mu_w]±std:  0.11129022262656252  ±  0.13971387505517543
+Conv2dCuda.0 E[std_w]±std:  0.0013836899160473966  ±  0.0007743424579102076
+LinearCuda.12 E[ mu_w]±std:  0.011417353011898968  ±  0.018817901592622217
+LinearCuda.12 E[std_w]±std:  9.730039072536426e-05  ±  6.367298763262685e-05
+
+
+Epoch 5/50 | training error: 21.14% | test error: 42.33%:   8%|▊         | 4/50 [18:00<2:45:05, 215.33s/it]Epoch 5/50 | training error: 21.14% | test error: 42.33%:  10%|█         | 5/50 [18:00<2:42:11, 216.25s/it]
+
+Conv2dCuda.0 E[ mu_w]±std:  0.11282548410892762  ±  0.14181116174846256
+Conv2dCuda.0 E[std_w]±std:  0.0013770114875036317  ±  0.0007671956580805239
+LinearCuda.12 E[ mu_w]±std:  0.011480786937288202  ±  0.018936739705029192
+LinearCuda.12 E[std_w]±std:  8.07663428304539e-05  ±  5.542298879171038e-05
+
+
+Epoch 6/50 | training error: 18.09% | test error: 43.64%:  10%|█         | 5/50 [21:40<2:42:11, 216.25s/it]Epoch 6/50 | training error: 18.09% | test error: 43.64%:  12%|█▏        | 6/50 [21:40<2:39:32, 217.55s/it]
+
+Conv2dCuda.0 E[ mu_w]±std:  0.11463863482913439  ±  0.14441841410453904
+Conv2dCuda.0 E[std_w]±std:  0.0013723154683649705  ±  0.0007615274112290327
+LinearCuda.12 E[ mu_w]±std:  0.011523721099190531  ±  0.01902423618578358
+LinearCuda.12 E[std_w]±std:  7.00135372039646e-05  ±  4.9801594907213775e-05
+
+
+Epoch 7/50 | training error: 16.53% | test error: 36.27%:  12%|█▏        | 6/50 [25:17<2:39:32, 217.55s/it]Epoch 7/50 | training error: 16.53% | test error: 36.27%:  14%|█▍        | 7/50 [25:17<2:35:50, 217.46s/it]
+
+Conv2dCuda.0 E[ mu_w]±std:  0.11575706195102005  ±  0.1458802064549181
+Conv2dCuda.0 E[std_w]±std:  0.0013687374417639456  ±  0.0007585283964459093
+LinearCuda.12 E[ mu_w]±std:  0.011542087569871917  ±  0.019076309731220903
+LinearCuda.12 E[std_w]±std:  6.211831100325106e-05  ±  4.5053471832326225e-05
+
+
+Epoch 8/50 | training error: 14.85% | test error: 28.84%:  14%|█▍        | 7/50 [28:57<2:35:50, 217.46s/it]Epoch 8/50 | training error: 14.85% | test error: 28.84%:  16%|█▌        | 8/50 [28:57<2:32:45, 218.24s/it]
+
+Conv2dCuda.0 E[ mu_w]±std:  0.1180383759760675  ±  0.1488039827361716
+Conv2dCuda.0 E[std_w]±std:  0.0013660827174872086  ±  0.0007567706300789041
+LinearCuda.12 E[ mu_w]±std:  0.011548920360882597  ±  0.01909808600493553
+LinearCuda.12 E[std_w]±std:  5.6032170871340414e-05  ±  4.088525370427445e-05
+
+
+Epoch 9/50 | training error: 14.07% | test error: 19.96%:  16%|█▌        | 8/50 [32:33<2:32:45, 218.24s/it]Epoch 9/50 | training error: 14.07% | test error: 19.96%:  18%|█▊        | 9/50 [32:33<2:28:40, 217.57s/it]
+
+Conv2dCuda.0 E[ mu_w]±std:  0.12048958511722621  ±  0.15214136062911604
+Conv2dCuda.0 E[std_w]±std:  0.0013643849596456632  ±  0.0007558317329459848
+LinearCuda.12 E[ mu_w]±std:  0.011548036033241171  ±  0.019113396094515907
+LinearCuda.12 E[std_w]±std:  5.11961874639251e-05  ±  3.766731309151886e-05
+
+
+Process Process-19:
+Traceback (most recent call last):
+  File "/home/mf/miniconda3/envs/cuTAGI/lib/python3.11/multiprocessing/process.py", line 317, in _bootstrap
+    util._exit_function()
+  File "/home/mf/miniconda3/envs/cuTAGI/lib/python3.11/multiprocessing/util.py", line 363, in _exit_function
+    _run_finalizers()
+  File "/home/mf/miniconda3/envs/cuTAGI/lib/python3.11/multiprocessing/util.py", line 303, in _run_finalizers
+    finalizer()
+  File "/home/mf/miniconda3/envs/cuTAGI/lib/python3.11/multiprocessing/util.py", line 227, in __call__
+    res = self._callback(*self._args, **self._kwargs)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mf/miniconda3/envs/cuTAGI/lib/python3.11/multiprocessing/queues.py", line 199, in _finalize_join
+    thread.join()
+  File "/home/mf/miniconda3/envs/cuTAGI/lib/python3.11/threading.py", line 1119, in join
+    self._wait_for_tstate_lock()
+  File "/home/mf/miniconda3/envs/cuTAGI/lib/python3.11/threading.py", line 1139, in _wait_for_tstate_lock
+    if lock.acquire(block, timeout):
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt
+Exception ignored in: <function _MultiProcessingDataLoaderIter.__del__ at 0x7f54a0dfbb00>
+Traceback (most recent call last):
+  File "/home/mf/miniconda3/envs/cuTAGI/lib/python3.11/site-packages/torch/utils/data/dataloader.py", line 1604, in __del__
+    self._shutdown_workers()
+  File "/home/mf/miniconda3/envs/cuTAGI/lib/python3.11/site-packages/torch/utils/data/dataloader.py", line 1568, in _shutdown_workers
+    w.join(timeout=_utils.MP_STATUS_CHECK_INTERVAL)
+  File "/home/mf/miniconda3/envs/cuTAGI/lib/python3.11/multiprocessing/process.py", line 149, in join
+    res = self._popen.wait(timeout)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mf/miniconda3/envs/cuTAGI/lib/python3.11/multiprocessing/popen_fork.py", line 40, in wait
+    if not wait([self.sentinel], timeout):
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mf/miniconda3/envs/cuTAGI/lib/python3.11/multiprocessing/connection.py", line 948, in wait
+    ready = selector.select(timeout)
+            ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mf/miniconda3/envs/cuTAGI/lib/python3.11/selectors.py", line 415, in select
+    fd_event_list = self._selector.poll(timeout)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mf/miniconda3/envs/cuTAGI/lib/python3.11/site-packages/torch/utils/data/_utils/signal_handling.py", line 73, in handler
+    _error_if_any_worker_fails()
+RuntimeError: DataLoader worker (pid 3989366) exited unexpectedly with exit code 1. Details are lost due to multiprocessing. Rerunning with num_workers=0 may give better error trace.
+Epoch 9/50 | training error: 14.07% | test error: 19.96%:  18%|█▊        | 9/50 [35:59<2:43:57, 239.94s/it]
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/mf/Documents/miquel/3/cuTAGI/examples/cifar_resnet_bench.py", line 450, in <module>
+    fire.Fire(main)
+  File "/home/mf/miniconda3/envs/cuTAGI/lib/python3.11/site-packages/fire/core.py", line 141, in Fire
+    component_trace = _Fire(component, args, parsed_flag_args, context, name)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mf/miniconda3/envs/cuTAGI/lib/python3.11/site-packages/fire/core.py", line 475, in _Fire
+    component, remaining_args = _CallAndUpdateTrace(
+                                ^^^^^^^^^^^^^^^^^^^^
+  File "/home/mf/miniconda3/envs/cuTAGI/lib/python3.11/site-packages/fire/core.py", line 691, in _CallAndUpdateTrace
+    component = fn(*varargs, **kwargs)
+                ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mf/Documents/miquel/3/cuTAGI/examples/cifar_resnet_bench.py", line 442, in main
+    tagi_trainer(
+  File "/home/mf/Documents/miquel/3/cuTAGI/examples/cifar_resnet_bench.py", line 304, in tagi_trainer
+    out_updater.update_remax(
+  File "/home/mf/Documents/miquel/3/cuTAGI/pytagi/nn/output_updater.py", line 53, in update_remax
+    self._cpp_backend.update_remax(
+KeyboardInterrupt

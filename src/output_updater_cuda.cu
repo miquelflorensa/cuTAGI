@@ -129,18 +129,28 @@ __global__ void update_delta_z_cuda_heteros(float const *mu_a,
 __global__ void update_delta_z_cuda_remax(float const *mu_a, float const *var_a,
                                           float const *jcb, float const *obs,
                                           float const *var_obs, int size,
-                                          float *delta_mu, float *delta_var) {
+                                          float *delta_mu, float *delta_var,
+                                          float const *d_var_a_copy) {
     int col = blockIdx.x * blockDim.x + threadIdx.x;
     float zero_pad = 0;
     float tmp = 0;
     if (col < size) {
         // tmp = jcb[col] / (var_a[col] + var_obs[col]);
         tmp = jcb[col] / var_a[col];
+        // if (tmp * d_var_a_copy[col] < -1) {
+        //     printf("tmp * var_z < -1: %f\n", tmp * d_var_a_copy[col]);
+        // }
+
+        // if (tmp * d_var_a_copy[col] > 1) {
+        //     printf("tmp * var_z > 1: %f\n", tmp * d_var_a_copy[col]);
+        // }
+
         if (isinf(tmp) || isnan(tmp)) {
             delta_mu[col] = zero_pad;
             delta_var[col] = zero_pad;
         } else {
             delta_mu[col] = tmp * (obs[col] - mu_a[col]);
+            // printf("delta_mu[%d]: %f\n", col, delta_mu[col]);
             delta_var[col] = -tmp * jcb[col];
         }
     }
@@ -291,6 +301,12 @@ void OutputUpdaterCuda::update_output_delta_z_remax(
     add_var_obs_to_var_a<<<blocks, this->num_cuda_threads>>>(
         cu_output_states->d_var_a, cu_obs->d_var_obs, no, B);
 
+    // Save var_a
+    float *d_var_a_copy;
+    cudaMalloc(&d_var_a_copy, no * B * sizeof(float));
+    cudaMemcpy(d_var_a_copy, cu_output_states->d_var_a, no * B * sizeof(float),
+               cudaMemcpyDeviceToDevice);
+
     // Mixture ReLU
     mixture_relu_mean_var_cuda<<<blocks, this->num_cuda_threads>>>(
         cu_output_states->d_mu_a, cu_output_states->d_var_a, num_states,
@@ -342,7 +358,8 @@ void OutputUpdaterCuda::update_output_delta_z_remax(
     update_delta_z_cuda_remax<<<blocks, this->num_cuda_threads>>>(
         cu_output_states->d_mu_a, cu_output_states->d_var_a,
         cu_output_states->d_jcb, cu_obs->d_mu_obs, cu_obs->d_var_obs,
-        num_states, cu_delta_states->d_delta_mu, cu_delta_states->d_delta_var);
+        num_states, cu_delta_states->d_delta_mu, cu_delta_states->d_delta_var,
+        d_var_a_copy);
 
     cudaDeviceSynchronize();
 }

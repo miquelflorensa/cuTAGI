@@ -969,22 +969,49 @@ __global__ void mixture_relu_mean_var_cuda(float const *mu_z,
     constexpr float SQRT_2PI = 2.5066282746310002f;
     if (col < num_states) {
         // Reused components for moments calculations
-        float tmp_mu_z = mu_z[col];
-        float std_z = powf(var_z[col], 0.5);
-        float alpha = tmp_mu_z / std_z;
-        float pdf_alpha = (1.0f / SQRT_2PI) * expf(-0.5f * alpha * alpha);
-        float cdf_alpha = normcdf_cuda(alpha);
+        // float tmp_mu_z = mu_z[col];
+        // float std_z = powf(var_z[col], 0.5);
+        // float alpha = tmp_mu_z / std_z;
+        // float pdf_alpha = (1.0f / SQRT_2PI) * expf(-0.5f * alpha * alpha);
+        // float cdf_alpha = normcdf_cuda(alpha);
 
-        // Moments calculations (L. Alric, 2024)
-        float tmp_mu_a = mu_z[col] * cdf_alpha + std_z * pdf_alpha;
-        mu_a[col] = tmp_mu_a;
-        var_a[col] = -tmp_mu_a * tmp_mu_a + 2 * tmp_mu_a * tmp_mu_z -
-                     tmp_mu_z * std_z * pdf_alpha +
-                     (var_z[col] - tmp_mu_z * tmp_mu_z) * cdf_alpha;
-        jcb[col] = cdf_alpha;
+        // // Moments calculations (L. Alric, 2024)
+        // float tmp_mu_a = mu_z[col] * cdf_alpha + std_z * pdf_alpha;
+        // mu_a[col] = tmp_mu_a;
+        // var_a[col] = -tmp_mu_a * tmp_mu_a + 2 * tmp_mu_a * tmp_mu_z -
+        //              tmp_mu_z * std_z * pdf_alpha +
+        //              (var_z[col] - tmp_mu_z * tmp_mu_z) * cdf_alpha;
+        // jcb[col] = cdf_alpha;
 
         // mu_a[col] = fmaxf(1e-12f, mu_a[col]);
         // var_a[col] = fmaxf(1e-6f, var_a[col]);
+        // float a1 = 0.1f;
+        // float a2 = 1.0f;
+
+        // mu_a[col] = a1 * mu_z[col] +
+        //             (a2 - a1) * (mu_z[col] * cdf_alpha + std_z * pdf_alpha);
+
+        // var_a[col] = a1 * a1 * (mu_z[col] * mu_z[col] + var_z[col]) +
+        //              (a2 * a2 - a1 * a1) *
+        //                  ((mu_z[col] * mu_z[col] + var_z[col]) * cdf_alpha +
+        //                   std_z * mu_z[col] * pdf_alpha) -
+        //              mu_a[col] * mu_a[col];
+
+        // jcb[col] =
+        //     (a1 * (mu_z[col] * mu_z[col] + var_z[col]) +
+        //      (a2 - a1) * ((mu_z[col] * mu_z[col] + var_z[col]) * cdf_alpha +
+        //                   std_z * mu_z[col] * pdf_alpha) -
+        //      mu_a[col] * mu_z[col]) /
+        //     var_z[col];
+
+        float beta = 1.0f;  // Example temperature parameter
+        mu_a[col] = (1 / beta) * logf(1 + expf(beta * mu_z[col]));
+        float tmp = 1 / (1 + expf(-beta * mu_z[col]));
+        jcb[col] = tmp / var_z[col];
+        var_a[col] = tmp * var_z[col] * tmp;
+        // if (mu_a[col] < -1.0f) {
+        //     jcb[col] = 0.0f;
+        // }
     }
 }
 
@@ -1146,6 +1173,91 @@ __global__ void softmax_mean_var_cuda(float const *mu_z, float *var_z,
     }
 }
 
+// #define EPS 1e-12f
+
+// __device__ float safe_log1p(float x) {
+//     // Use Taylor series approximation for small x
+//     return (x < 1e-4f) ? (x - 0.5f * x * x) : log1pf(x);
+// }
+
+// __device__ float safe_exp(float x) {
+//     // Clamp x to avoid overflow
+//     return expf(fminf(x, 88.0f));  // exp(88) is ~1e38 (near float32 max)
+// }
+
+// __device__ float safe_divide(float num, float denom) {
+//     // Handle division by zero and small values
+//     return (fabsf(denom) > EPS) ? (num / denom) : 0.0f;
+// }
+
+// __device__ float safe_log(float x) {
+//     // Handle log(0) and negative values
+//     return (x > EPS) ? logf(x) : 0.0f;
+// }
+
+// __global__ void remax_forward_cuda(float *mu_m, float *var_m, int no, int
+// B,
+//                                    float *mu_a, float *var_a, float *jcb,
+//                                    float *sum_mu_global,
+//                                    float *sum_var_global) {
+//     int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+//     if (idx < B * no) {
+//         int i = idx / no;  // Batch index
+//         int j = idx % no;  // Output index
+
+//         // Compute partial sums for the batch
+//         atomicAdd(&sum_mu_global[i], mu_m[idx]);
+//         atomicAdd(&sum_var_global[i], var_m[idx]);
+//     }
+// }
+
+// __global__ void compute_remax_outputs(float *mu_m, float *var_m, int no,
+// int B,
+//                                       float *mu_a, float *var_a, float
+//                                       *jcb, float *sum_mu_global, float
+//                                       *sum_var_global) {
+//     int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+//     if (idx < B * no) {
+//         int i = idx / no;  // Batch index
+//         int j = idx % no;  // Output index
+
+//         // Compute log-space transformations
+//         float mu_square = mu_m[idx] * mu_m[idx];
+//         float mu_log_square = sum_mu_global[i] * sum_mu_global[i];
+
+//         // Safe log(1 + x) for small x
+//         float var_log = safe_log1p(safe_divide(var_m[idx], mu_square));
+//         float mu_log = safe_log(mu_m[idx]) - 0.5f * var_log;
+
+//         float var_logsum =
+//             safe_log1p(safe_divide(sum_var_global[i], mu_log_square));
+//         float mu_logsum = safe_log(sum_mu_global[i]) - 0.5f * var_logsum;
+
+//         // Covariance term in log-space
+//         float cov_log_logsum =
+//             safe_log1p(safe_divide(var_m[idx], sum_mu_global[i] *
+//             mu_m[idx]));
+
+//         // Final log-space parameters for A
+//         float tmp_mu = mu_log - mu_logsum;
+//         float tmp_var = var_log + var_logsum - 2.0f * cov_log_logsum;
+
+//         // Transform back to original space
+//         float tmp_mu_a = safe_exp(tmp_mu + 0.5f * tmp_var);
+//         float var = var_m[idx];
+
+//         // Store results
+//         mu_a[idx] = tmp_mu_a;
+//         var_a[idx] =
+//             fmaxf(tmp_mu_a * tmp_mu_a, EPS) * (safe_exp(tmp_var) - 1.0f);
+//         jcb[idx] =
+//             tmp_mu_a * safe_divide(cov_log_logsum * mu_m[idx], var) *
+//             jcb[idx];
+//     }
+// }
+
 __global__ void remax_forward_cuda(float *mu_m, float *var_m, int no, int B,
                                    float *mu_a, float *var_a, float *jcb,
                                    float *sum_mu_global,
@@ -1199,11 +1311,8 @@ __global__ void compute_remax_outputs(float *mu_m, float *var_m, int no, int B,
         float tmp_mu_a = expf(tmp_mu + 0.5f * tmp_var);
         float var = var_m[idx];
         mu_a[idx] = tmp_mu_a;
-        // var_a[idx] = fmaxf(tmp_mu_a * tmp_mu_a * (expf(tmp_var) - 1.0f),
-        // 1e-6f);
-
         var_a[idx] = tmp_mu_a * tmp_mu_a * (expf(tmp_var) - 1.0f);
-        jcb[idx] = expf(tmp_mu + 0.5f * tmp_var) * cov_a_hat_M / var * jcb[idx];
+        jcb[idx] = tmp_mu_a * cov_a_hat_M / var * jcb[idx];
     }
 }
 

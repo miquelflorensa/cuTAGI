@@ -1,0 +1,85 @@
+Files already downloaded and verified
+Files already downloaded and verified
+Training Progress:   0%|          | 0/50 [00:00<?, ?it/s]Prior predictive -> E[v_pred] =  0.5391588 +- 0.6305134
+Epoch 1/50 | training error: 75.33% | test error: 91.26
+%:   2%|▏         | 1/50 [03:28<2:50:09, 208.36s/it]Epoch 2/50 | training error: 62.49% | test error: 85.01
+%:   4%|▍         | 2/50 [06:53<2:45:16, 206.58s/it]Epoch 3/50 | training error: 56.67% | test error: 72.58
+%:   6%|▌         | 3/50 [10:19<2:41:23, 206.04s/it]Epoch 4/50 | training error: 51.94% | test error: 77.21
+%:   8%|▊         | 4/50 [13:44<2:37:47, 205.81s/it]Epoch 5/50 | training error: 47.62% | test error: 63.83
+%:  10%|█         | 5/50 [17:12<2:34:55, 206.58s/it]Epoch 6/50 | training error: 44.16% | test error: 73.17
+%:  12%|█▏        | 6/50 [20:40<2:31:57, 207.21s/it]Epoch 7/50 | training error: 40.27% | test error: 69.39
+%:  14%|█▍        | 7/50 [24:09<2:28:42, 207.51s/it]Epoch 8/50 | training error: 37.17% | test error: 70.83
+%:  16%|█▌        | 8/50 [27:36<2:25:17, 207.55s/it]Epoch 9/50 | training error: 35.22% | test error: 55.88
+%:  18%|█▊        | 9/50 [31:02<2:21:24, 206.95s/it]Epoch 10/50 | training error: 32.25% | test error: 75.20
+%:  20%|██        | 10/50 [34:27<2:17:36, 206.40s/it]Epoch 11/50 | training error: 29.94% | test error: 56.40
+%:  22%|██▏       | 11/50 [37:52<2:13:52, 205.95s/it]Epoch 12/50 | training error: 27.99% | test error: 39.20
+%:  24%|██▍       | 12/50 [41:17<2:10:15, 205.68s/it]Epoch 13/50 | training error: 26.42% | test error: 60.44
+%:  26%|██▌       | 13/50 [44:43<2:06:58, 205.90s/it]Epoch 14/50 | training error: 24.88% | test error: 55.22
+%:  28%|██▊       | 14/50 [48:08<2:03:22, 205.61s/it]Epoch 15/50 | training error: 24.65% | test error: 32.86
+%:  30%|███       | 15/50 [51:33<1:59:49, 205.42s/it]Epoch 16/50 | training error: 23.28% | test error: 80.91
+%:  32%|███▏      | 16/50 [55:00<1:56:32, 205.68s/it]Epoch 17/50 | training error: 21.53% | test error: 38.20
+%:  34%|███▍      | 17/50 [58:25<1:53:00, 205.48s/it]Process Process-35:
+Exception ignored in: <function _MultiProcessingDataLoaderIter.__del__ at 0x7f4fac5f7ce0>
+Traceback (most recent call last):
+  File "/home/mf/miniconda3/envs/cuTAGI/lib/python3.11/site-packages/torch/utils/data/dataloader.py", line 1604, in __del__
+    self._shutdown_workers()
+  File "/home/mf/miniconda3/envs/cuTAGI/lib/python3.11/site-packages/torch/utils/data/dataloader.py", line 1568, in _shutdown_workers
+    w.join(timeout=_utils.MP_STATUS_CHECK_INTERVAL)
+  File "/home/mf/miniconda3/envs/cuTAGI/lib/python3.11/multiprocessing/process.py", line 149, in join
+    res = self._popen.wait(timeout)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mf/miniconda3/envs/cuTAGI/lib/python3.11/multiprocessing/popen_fork.py", line 40, in wait
+    if not wait([self.sentinel], timeout):
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mf/miniconda3/envs/cuTAGI/lib/python3.11/multiprocessing/connection.py", line 948, in wait
+    ready = selector.select(timeout)
+            ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mf/miniconda3/envs/cuTAGI/lib/python3.11/selectors.py", line 415, in select
+    fd_event_list = self._selector.poll(timeout)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt: 
+Epoch 17/50 | training error: 21.53% | test error: 38.20
+%:  34%|███▍      | 17/50 [59:32<1:55:34, 210.14s/it]
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/mf/Documents/miquel/3/cuTAGI/examples/cifar.py", line 390, in <module>
+    fire.Fire(main)
+  File "/home/mf/miniconda3/envs/cuTAGI/lib/python3.11/site-packages/fire/core.py", line 141, in Fire
+    component_trace = _Fire(component, args, parsed_flag_args, context, name)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mf/miniconda3/envs/cuTAGI/lib/python3.11/site-packages/fire/core.py", line 475, in _Fire
+    component, remaining_args = _CallAndUpdateTrace(
+                                ^^^^^^^^^^^^^^^^^^^^
+  File "/home/mf/miniconda3/envs/cuTAGI/lib/python3.11/site-packages/fire/core.py", line 691, in _CallAndUpdateTrace
+    component = fn(*varargs, **kwargs)
+                ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mf/Documents/miquel/3/cuTAGI/examples/cifar.py", line 382, in main
+    tagi_trainer(
+  File "/home/mf/Documents/miquel/3/cuTAGI/examples/cifar.py", line 255, in tagi_trainer
+    m_pred, v_pred = net(x)
+                     ^^^^^^
+  File "/home/mf/Documents/miquel/3/cuTAGI/pytagi/nn/sequential.py", line 25, in __call__
+    return self.forward(mu_x, var_x)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mf/Documents/miquel/3/cuTAGI/pytagi/nn/sequential.py", line 142, in forward
+    return self.get_outputs()
+           ^^^^^^^^^^^^^^^^^^
+  File "/home/mf/Documents/miquel/3/cuTAGI/pytagi/nn/sequential.py", line 208, in get_outputs
+    return self._cpp_backend.get_outputs()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt
+Exception ignored in atexit callback: <function _exit_function at 0x7f4f698a8e00>
+Traceback (most recent call last):
+  File "/home/mf/miniconda3/envs/cuTAGI/lib/python3.11/multiprocessing/util.py", line 360, in _exit_function
+    p.join()
+  File "/home/mf/miniconda3/envs/cuTAGI/lib/python3.11/multiprocessing/process.py", line 149, in join
+    res = self._popen.wait(timeout)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mf/miniconda3/envs/cuTAGI/lib/python3.11/multiprocessing/popen_fork.py", line 43, in wait
+    return self.poll(os.WNOHANG if timeout == 0.0 else 0)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mf/miniconda3/envs/cuTAGI/lib/python3.11/multiprocessing/popen_fork.py", line 27, in poll
+    pid, sts = os.waitpid(self.pid, flag)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt: 
