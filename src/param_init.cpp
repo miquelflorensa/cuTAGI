@@ -25,10 +25,12 @@ std::vector<float> orthogonal_init(int rows, int cols, float gain) {
     }
 
     // Perform SVD decomposition
-    Eigen::BDCSVD<Eigen::MatrixXf> svd(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
+    Eigen::BDCSVD<Eigen::MatrixXf> svd(
+        A, Eigen::ComputeThinU | Eigen::ComputeThinV);
 
     // Obtain the orthogonal matrix Q from U or V
-    Eigen::MatrixXf Q = (rows >= cols) ? svd.matrixU().leftCols(cols) : svd.matrixV().leftCols(rows);
+    Eigen::MatrixXf Q = (rows >= cols) ? svd.matrixU().leftCols(cols)
+                                       : svd.matrixV().leftCols(rows);
 
     // Apply gain
     // Q *= gain;
@@ -151,7 +153,7 @@ std::tuple<std::vector<float>, std::vector<float>> uniform_param_init(
  */
 {
     // Get generator
-    std::mt19937 &gen = SeedManager::get_instance().get_engine();
+    std::mt19937& gen = SeedManager::get_instance().get_engine();
 
     // Initialize pointers
     std::vector<float> S(N);
@@ -322,14 +324,16 @@ std::vector<float> orthogonal_init_conv2d(size_t out_channels,
     }
 
     // Perform SVD decomposition
-    Eigen::BDCSVD<Eigen::MatrixXf> svd(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
+    Eigen::BDCSVD<Eigen::MatrixXf> svd(
+        A, Eigen::ComputeThinU | Eigen::ComputeThinV);
 
     // Extract orthogonal matrix
     Eigen::MatrixXf Q;
     if (out_channels >= kernel_elements) {
         Q = svd.matrixU().leftCols(kernel_elements);  // Use U for orthogonality
     } else {
-        Q = svd.matrixV().leftCols(out_channels);    // Use V when out_channels < kernel_elements
+        Q = svd.matrixV().leftCols(
+            out_channels);  // Use V when out_channels < kernel_elements
     }
 
     // Apply gain
@@ -344,7 +348,8 @@ std::vector<float> orthogonal_init_conv2d(size_t out_channels,
     return std::vector<float>(Q.data(), Q.data() + Q.size());
 }
 
-std::tuple<std::vector<float>, std::vector<float>, std::vector<float>, std::vector<float>>
+std::tuple<std::vector<float>, std::vector<float>, std::vector<float>,
+           std::vector<float>>
 init_weight_bias_conv2d(const size_t kernel_size, const size_t in_channels,
                         const size_t out_channels,
                         const std::string& init_method, const float gain_w,
@@ -360,14 +365,16 @@ init_weight_bias_conv2d(const size_t kernel_size, const size_t in_channels,
     } else if (init_method == "Orthogonal" || init_method == "orthogonal") {
         scale = he_init(fan_in);  // Ensure activation-specific scaling
     } else {
-        throw std::invalid_argument("Unsupported initialization method: " + init_method);
+        throw std::invalid_argument("Unsupported initialization method: " +
+                                    init_method);
     }
 
     // Initialize weights and biases
     std::vector<float> mu_w, var_w, mu_b, var_b;
 
     if (init_method == "Orthogonal" || init_method == "orthogonal") {
-        mu_w = orthogonal_init_conv2d(out_channels, in_channels, kernel_size, gain_w);
+        mu_w = orthogonal_init_conv2d(out_channels, in_channels, kernel_size,
+                                      gain_w);
         var_w = std::vector<float>(num_weights, pow(gain_w * scale, 2));
     } else {
         // Gaussian initialization
@@ -386,7 +393,7 @@ init_weight_bias_conv2d(const size_t kernel_size, const size_t in_channels,
 
 std::tuple<std::vector<float>, std::vector<float>, std::vector<float>,
            std::vector<float>>
-init_weight_bias_norm(const std::string &init_method, const float gain_w,
+init_weight_bias_norm(const std::string& init_method, const float gain_w,
                       const float gain_b, const int input_size,
                       const int output_size, int num_weights, int num_biases) {
     std::vector<float> mu_w, var_w, mu_b, var_b;
@@ -402,7 +409,6 @@ init_weight_bias_norm(const std::string &init_method, const float gain_w,
 
     return {mu_w, var_w, mu_b, var_b};
 }
-
 
 std::tuple<std::vector<float>, std::vector<float>, std::vector<float>,
            std::vector<float>>

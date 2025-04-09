@@ -958,6 +958,15 @@ Normal cumulative distribution function
     return 0.5f * erfcf(-x * 0.7071067811865475f);
 }
 
+// Logarithm of exp(x) - 1
+__device__ float log_expm1(float x) {
+    if (x > 0.0f) {
+        return x + log1pf(-expf(-x));  // log(exp(x) - 1) = x + log(1 - exp(-x))
+    } else {
+        return log1pf(-expf(x));  // log(1 - exp(x))
+    }
+}
+
 __global__ void mixture_relu_mean_var_cuda(float const *mu_z,
                                            float const *var_z, int num_states,
                                            float *mu_a, float *jcb,
@@ -969,92 +978,145 @@ __global__ void mixture_relu_mean_var_cuda(float const *mu_z,
     constexpr float SQRT_2PI = 2.5066282746310002f;
     if (col < num_states) {
         // Reused components for moments calculations
-        // float tmp_mu_z = mu_z[col];
-        // float std_z = powf(var_z[col], 0.5);
-        // float alpha = tmp_mu_z / std_z;
-        // float pdf_alpha = (1.0f / SQRT_2PI) * expf(-0.5f * alpha * alpha);
-        // float cdf_alpha = normcdf_cuda(alpha);
+        float tmp_mu_z = mu_z[col];
+        float std_z = powf(var_z[col], 0.5);
+        float alpha = tmp_mu_z / std_z;
+        float pdf_alpha = (1.0f / SQRT_2PI) * expf(-0.5f * alpha * alpha);
+        float cdf_alpha = normcdf_cuda(alpha);
 
-        // // Moments calculations (L. Alric, 2024)
-        // float tmp_mu_a = mu_z[col] * cdf_alpha + std_z * pdf_alpha;
-        // mu_a[col] = tmp_mu_a;
-        // var_a[col] = -tmp_mu_a * tmp_mu_a + 2 * tmp_mu_a * tmp_mu_z -
-        //              tmp_mu_z * std_z * pdf_alpha +
-        //              (var_z[col] - tmp_mu_z * tmp_mu_z) * cdf_alpha;
-        // jcb[col] = cdf_alpha;
-
-        // mu_a[col] = fmaxf(1e-12f, mu_a[col]);
-        // var_a[col] = fmaxf(1e-6f, var_a[col]);
-        // float a1 = 0.1f;
-        // float a2 = 1.0f;
-
-        // mu_a[col] = a1 * mu_z[col] +
-        //             (a2 - a1) * (mu_z[col] * cdf_alpha + std_z * pdf_alpha);
-
-        // var_a[col] = a1 * a1 * (mu_z[col] * mu_z[col] + var_z[col]) +
-        //              (a2 * a2 - a1 * a1) *
-        //                  ((mu_z[col] * mu_z[col] + var_z[col]) * cdf_alpha +
-        //                   std_z * mu_z[col] * pdf_alpha) -
-        //              mu_a[col] * mu_a[col];
-
-        // jcb[col] =
-        //     (a1 * (mu_z[col] * mu_z[col] + var_z[col]) +
-        //      (a2 - a1) * ((mu_z[col] * mu_z[col] + var_z[col]) * cdf_alpha +
-        //                   std_z * mu_z[col] * pdf_alpha) -
-        //      mu_a[col] * mu_z[col]) /
-        //     var_z[col];
-
-        float beta = 1.0f;  // Example temperature parameter
-        mu_a[col] = (1 / beta) * logf(1 + expf(beta * mu_z[col]));
-        float tmp = 1 / (1 + expf(-beta * mu_z[col]));
-        jcb[col] = tmp / var_z[col];
-        var_a[col] = tmp * var_z[col] * tmp;
-        // if (mu_a[col] < -1.0f) {
-        //     jcb[col] = 0.0f;
-        // }
+        // Moments calculations (L. Alric, 2024)
+        float tmp_mu_a = mu_z[col] * cdf_alpha + std_z * pdf_alpha;
+        mu_a[col] = tmp_mu_a;
+        var_a[col] = -tmp_mu_a * tmp_mu_a + 2 * tmp_mu_a * tmp_mu_z -
+                     tmp_mu_z * std_z * pdf_alpha +
+                     (var_z[col] - tmp_mu_z * tmp_mu_z) * cdf_alpha;
+        jcb[col] = cdf_alpha;
     }
 }
 
+__device__ float normpdf_cuda(float x) {
+    // Standard normal PDF
+    constexpr float INV_SQRT_2PI = 0.3989422804f;
+    return INV_SQRT_2PI * expf(-0.5f * x * x);
+}
+
+// LAPLACE CDF activation function (used in mixture of sigmoid function)
+// __global__ void laplace_cdf_moments_cuda
 __global__ void mixture_sigmoid_mean_var_cuda(float const *mu_z,
                                               float const *var_z,
                                               int num_states, float *mu_a,
-                                              float *jcb, float *var_a)
-/*
- */
-{
+                                              float *jcb, float *var_a) {
     int col = blockIdx.x * blockDim.x + threadIdx.x;
-    float std_z, alpha_l, alpha_u, pdf_l, pdf_u, cdf_l, cdf_u;
-    constexpr float SQRT_2PI = 2.5066282746310002f;
-
     if (col < num_states) {
-        // cdf and pdf for truncated normal distribution
-        std_z = powf(var_z[col], 0.5);
-        alpha_l = (1.0f + mu_z[col]) / std_z;  // Lower truncation
-        alpha_u = (1.0f - mu_z[col]) / std_z;  // Upper truncation
-        cdf_l = normcdf_cuda(alpha_l);
-        cdf_u = normcdf_cuda(alpha_u);
-        pdf_l = (1.0f / SQRT_2PI) * expf(-0.5f * alpha_l * alpha_l);
-        pdf_u = (1.0f / SQRT_2PI) * expf(-0.5f * alpha_u * alpha_u);
+        float mu_L = 2.5f;
+        float b = 1.0f;
 
-        // Moments calculations (L. Alric, 2024)
+        // printf("mu_z[%d] = %f\n", col, mu_z[col]);
+        // printf("var_z[%d] = %f\n", col, var_z[col]);
+
+        // Input Gaussian parameters
         float tmp_mu_z = mu_z[col];
-        float tmp_mu_z_2 = tmp_mu_z * tmp_mu_z;
-        float tmp_mu_a = (tmp_mu_z + 1) * cdf_l + (tmp_mu_z - 1) * cdf_u +
-                         std_z * (pdf_l - pdf_u) - tmp_mu_z;
+        float sigma = sqrtf(var_z[col]);
+        float sigma2 = var_z[col];
+        float d = mu_L - tmp_mu_z;
 
-        mu_a[col] = tmp_mu_a;
-        var_a[col] =
-            max(0.000001f,
-                (cdf_l * (var_z[col] - tmp_mu_z_2 - 2 * tmp_mu_z - 1) +
-                 cdf_u * (var_z[col] - tmp_mu_z_2 + 2 * tmp_mu_z - 1) +
-                 std_z * (pdf_u * (tmp_mu_z - 1) - pdf_l * (tmp_mu_z + 1)) -
-                 tmp_mu_a * tmp_mu_a + 2 * mu_a[col] * tmp_mu_z +
-                 tmp_mu_z * tmp_mu_z - var_z[col] + 2) /
-                    4.0f);
-        mu_a[col] = tmp_mu_a / 2.0f + 0.5f;
-        jcb[col] = (cdf_u + cdf_l - 1) / 2.0f;
+        // Common terms
+        float t1 = sigma / b;
+        float t2 = d / sigma;
+        float t3 = sigma * sigma / (2.0f * b * b);
+
+        // ----- Mean calculation -----
+        float term1 = 0.5f * expf(t3 - d / b) * (1.0f - normcdf_cuda(t1 - t2));
+        float term2 = -0.5f * expf(d / b + t3) * (1.0f - normcdf_cuda(t1 + t2));
+        float term3 = 1.0f - normcdf_cuda(d / sigma);
+        float mean = term1 + term2 + term3;
+
+        // ----- Covariance calculation (Cov(Z,A)) -----
+        // Term for x < mu_L
+        float term_za_low1 = 0.5f * (tmp_mu_z + sigma2 / b) * expf(t3 - d / b) *
+                             (1.0f - normcdf_cuda(t1 - t2));
+        float term_za_low2 =
+            0.5f * sigma2 / b * expf(t3 - d / b) * normpdf_cuda(t1 - t2);
+        float term_za_low = term_za_low1 + term_za_low2;
+
+        // Term for x >= mu_L
+        float term_za_high1 = tmp_mu_z * (1.0f - normcdf_cuda(d / sigma)) +
+                              sigma * normpdf_cuda(d / sigma);
+        float term_za_high2 = -0.5f * (tmp_mu_z - sigma2 / b) *
+                              expf(t3 + d / b) * (1.0f - normcdf_cuda(t1 + t2));
+        float term_za_high3 =
+            -0.5f * sigma2 / b * expf(t3 + d / b) * normpdf_cuda(t1 + t2);
+        float term_za_high = term_za_high1 + term_za_high2 + term_za_high3;
+
+        float cov_za = (term_za_low + term_za_high) - mean * tmp_mu_z;
+
+        // Jacobian = Cov(Z,A)/Var(A) [different from ReLU case!]
+        float jacobian = cov_za / sigma2;
+
+        // ----- Variance calculation -----
+        float term_z2_low = 0.25f * expf(4.0f * t3 - 2.0f * d / b) *
+                            (1.0f - normcdf_cuda(2.0f * t1 - t2));
+        float term_z2_high1 = 1.0f - normcdf_cuda(d / sigma);
+        float term_z2_high2 =
+            -expf(t3 + d / b) * (1.0f - normcdf_cuda(t1 + t2));
+        float term_z2_high3 = 0.25f * expf(4.0f * t3 + 2.0f * d / b) *
+                              (1.0f - normcdf_cuda(2.0f * t1 + t2));
+
+        float e_z2 =
+            term_z2_low + term_z2_high1 + term_z2_high2 + term_z2_high3;
+        float variance = e_z2 - mean * mean;
+
+        // Store results
+        mu_a[col] = mean;
+        var_a[col] = variance;
+        jcb[col] = jacobian;
+
+        // printf("mu_a[%d] = %f\n", col, mean);
+        // printf("var_a[%d] = %f\n", col, variance);
+        // printf("cov[%d] = %f\n", col, cov_za);
     }
 }
+
+// __global__ void mixture_sigmoid_mean_var_cuda(float const *mu_z,
+//                                               float const *var_z,
+//                                               int num_states, float *mu_a,
+//                                               float *jcb, float *var_a)
+// /*
+//  */
+// {
+//     int col = blockIdx.x * blockDim.x + threadIdx.x;
+//     float std_z, alpha_l, alpha_u, pdf_l, pdf_u, cdf_l, cdf_u;
+//     constexpr float SQRT_2PI = 2.5066282746310002f;
+
+//     if (col < num_states) {
+//         // cdf and pdf for truncated normal distribution
+//         std_z = powf(var_z[col], 0.5);
+//         alpha_l = (1.0f + mu_z[col]) / std_z;  // Lower truncation
+//         alpha_u = (1.0f - mu_z[col]) / std_z;  // Upper truncation
+//         cdf_l = normcdf_cuda(alpha_l);
+//         cdf_u = normcdf_cuda(alpha_u);
+//         pdf_l = (1.0f / SQRT_2PI) * expf(-0.5f * alpha_l * alpha_l);
+//         pdf_u = (1.0f / SQRT_2PI) * expf(-0.5f * alpha_u * alpha_u);
+
+//         // Moments calculations (L. Alric, 2024)
+//         float tmp_mu_z = mu_z[col];
+//         float tmp_mu_z_2 = tmp_mu_z * tmp_mu_z;
+//         float tmp_mu_a = (tmp_mu_z + 1) * cdf_l + (tmp_mu_z - 1) * cdf_u +
+//                          std_z * (pdf_l - pdf_u) - tmp_mu_z;
+
+//         mu_a[col] = tmp_mu_a;
+//         var_a[col] =
+//             max(0.000001f,
+//                 (cdf_l * (var_z[col] - tmp_mu_z_2 - 2 * tmp_mu_z - 1) +
+//                  cdf_u * (var_z[col] - tmp_mu_z_2 + 2 * tmp_mu_z - 1) +
+//                  std_z * (pdf_u * (tmp_mu_z - 1) - pdf_l * (tmp_mu_z + 1)) -
+//                  tmp_mu_a * tmp_mu_a + 2 * mu_a[col] * tmp_mu_z +
+//                  tmp_mu_z * tmp_mu_z - var_z[col] + 2) /
+//                     4.0f);
+//         mu_a[col] = tmp_mu_a / 2.0f + 0.5f;
+//         jcb[col] = (cdf_u + cdf_l - 1) / 2.0f;
+//     }
+// }
 
 __global__ void mixture_tanh_mean_var_cuda(float const *mu_z,
                                            float const *var_z, int num_states,
@@ -1173,91 +1235,6 @@ __global__ void softmax_mean_var_cuda(float const *mu_z, float *var_z,
     }
 }
 
-// #define EPS 1e-12f
-
-// __device__ float safe_log1p(float x) {
-//     // Use Taylor series approximation for small x
-//     return (x < 1e-4f) ? (x - 0.5f * x * x) : log1pf(x);
-// }
-
-// __device__ float safe_exp(float x) {
-//     // Clamp x to avoid overflow
-//     return expf(fminf(x, 88.0f));  // exp(88) is ~1e38 (near float32 max)
-// }
-
-// __device__ float safe_divide(float num, float denom) {
-//     // Handle division by zero and small values
-//     return (fabsf(denom) > EPS) ? (num / denom) : 0.0f;
-// }
-
-// __device__ float safe_log(float x) {
-//     // Handle log(0) and negative values
-//     return (x > EPS) ? logf(x) : 0.0f;
-// }
-
-// __global__ void remax_forward_cuda(float *mu_m, float *var_m, int no, int
-// B,
-//                                    float *mu_a, float *var_a, float *jcb,
-//                                    float *sum_mu_global,
-//                                    float *sum_var_global) {
-//     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-
-//     if (idx < B * no) {
-//         int i = idx / no;  // Batch index
-//         int j = idx % no;  // Output index
-
-//         // Compute partial sums for the batch
-//         atomicAdd(&sum_mu_global[i], mu_m[idx]);
-//         atomicAdd(&sum_var_global[i], var_m[idx]);
-//     }
-// }
-
-// __global__ void compute_remax_outputs(float *mu_m, float *var_m, int no,
-// int B,
-//                                       float *mu_a, float *var_a, float
-//                                       *jcb, float *sum_mu_global, float
-//                                       *sum_var_global) {
-//     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-
-//     if (idx < B * no) {
-//         int i = idx / no;  // Batch index
-//         int j = idx % no;  // Output index
-
-//         // Compute log-space transformations
-//         float mu_square = mu_m[idx] * mu_m[idx];
-//         float mu_log_square = sum_mu_global[i] * sum_mu_global[i];
-
-//         // Safe log(1 + x) for small x
-//         float var_log = safe_log1p(safe_divide(var_m[idx], mu_square));
-//         float mu_log = safe_log(mu_m[idx]) - 0.5f * var_log;
-
-//         float var_logsum =
-//             safe_log1p(safe_divide(sum_var_global[i], mu_log_square));
-//         float mu_logsum = safe_log(sum_mu_global[i]) - 0.5f * var_logsum;
-
-//         // Covariance term in log-space
-//         float cov_log_logsum =
-//             safe_log1p(safe_divide(var_m[idx], sum_mu_global[i] *
-//             mu_m[idx]));
-
-//         // Final log-space parameters for A
-//         float tmp_mu = mu_log - mu_logsum;
-//         float tmp_var = var_log + var_logsum - 2.0f * cov_log_logsum;
-
-//         // Transform back to original space
-//         float tmp_mu_a = safe_exp(tmp_mu + 0.5f * tmp_var);
-//         float var = var_m[idx];
-
-//         // Store results
-//         mu_a[idx] = tmp_mu_a;
-//         var_a[idx] =
-//             fmaxf(tmp_mu_a * tmp_mu_a, EPS) * (safe_exp(tmp_var) - 1.0f);
-//         jcb[idx] =
-//             tmp_mu_a * safe_divide(cov_log_logsum * mu_m[idx], var) *
-//             jcb[idx];
-//     }
-// }
-
 __global__ void remax_forward_cuda(float *mu_m, float *var_m, int no, int B,
                                    float *mu_a, float *var_a, float *jcb,
                                    float *sum_mu_global,
@@ -1268,9 +1245,15 @@ __global__ void remax_forward_cuda(float *mu_m, float *var_m, int no, int B,
         int i = idx / no;  // Batch index
         int j = idx % no;  // Output index
 
+        // Add for TAGI-V
+        // if (idx % 2 == 0) {
+            // atomicAdd(&sum_mu_global[i], mu_m[idx]);
+            // atomicAdd(&sum_var_global[i], var_m[idx]);
+        // }
+
         // Ensure mu_m and var_m have minimum values
-        mu_m[idx] = fmaxf(1e-12f, mu_m[idx]);
-        var_m[idx] = fmaxf(1e-6f, var_m[idx]);
+        // mu_m[idx] = fmaxf(1e-12f, mu_m[idx]);
+        // var_m[idx] = fmaxf(1e-6f, var_m[idx]);
 
         // Compute partial sums for the batch
         atomicAdd(&sum_mu_global[i], mu_m[idx]);
@@ -1287,6 +1270,7 @@ __global__ void compute_remax_outputs(float *mu_m, float *var_m, int no, int B,
     if (idx < B * no) {
         int i = idx / no;  // Batch index
         int j = idx % no;  // Output index
+        float mu_m_in = mu_m[idx];
 
         float mu_square = fmaxf(mu_m[idx] * mu_m[idx], 1e-6f);
         float mu_log_square = fmaxf(sum_mu_global[i] * sum_mu_global[i], 1e-6f);
@@ -1295,12 +1279,15 @@ __global__ void compute_remax_outputs(float *mu_m, float *var_m, int no, int B,
 
         float var_log = logf(1.0f + (var_m[idx] / mu_square));
         float mu_log = logf(mu_m[idx]) - 0.5f * var_log;
+        float cov_M_ln_M = var_log * mu_m[idx];
+        float cov_M_M = var_m[idx];
+        float cov_Z_M = jcb[idx];
 
         float var_logsum = logf(1.0f + (sum_var_global[i] / mu_log_square));
         float mu_logsum = logf(sum_mu_global[i]) - 0.5f * var_logsum;
 
-        float cov_log_logsum = logf(
-            1.0f + var_m[idx] * (1.0f / sum_mu_global[i]) * (1.0f / mu_m[idx]));
+        float cov_log_logsum =
+            logf(1.0f + cov_M_M / mu_m[idx] / sum_mu_global[i]);
 
         float cov_a_hat_ln_M = var_log - cov_log_logsum;
         float cov_a_hat_M = cov_a_hat_ln_M * mu_m[idx];
@@ -1311,8 +1298,11 @@ __global__ void compute_remax_outputs(float *mu_m, float *var_m, int no, int B,
         float tmp_mu_a = expf(tmp_mu + 0.5f * tmp_var);
         float var = var_m[idx];
         mu_a[idx] = tmp_mu_a;
-        var_a[idx] = tmp_mu_a * tmp_mu_a * (expf(tmp_var) - 1.0f);
-        jcb[idx] = tmp_mu_a * cov_a_hat_M / var * jcb[idx];
+        // var_a[idx] = tmp_mu_a * tmp_mu_a * (expf(tmp_var) - 1.0f);
+        var_a[idx] = expf(2.0f * tmp_mu + tmp_var) * (expf(tmp_var) - 1.0f);
+        jcb[idx] *= tmp_mu_a * cov_a_hat_M / var;
+        // float cov_a_m = (expf(cov_a_hat_ln_M) - 1.0f) * mu_m_in * tmp_mu_a;
+        // jcb[idx] = cov_a_m / var * cov_Z_M;
     }
 }
 
@@ -1330,10 +1320,11 @@ __global__ void even_exp_mean_var_cuda(float const *mu_z, float const *var_z,
             var_a[col] = var_z[col];
             jcb_a[col] = jcb_z[col];
         } else {
-            mu_a[col] = expf(mu_z[col] + 0.5f * var_z[col]);
+            float muA = expf(mu_z[col] + 0.5f * var_z[col]);
+            mu_a[col] = muA;
             var_a[col] =
                 expf(2.0f * mu_z[col] + var_z[col]) * (expf(var_z[col]) - 1.0f);
-            jcb_a[col] = var_z[col] * mu_a[col];
+            jcb_a[col] = muA;
         }
     }
 }

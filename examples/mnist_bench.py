@@ -18,8 +18,16 @@ from pytagi.nn import (
     Sequential,
     MixtureTanh,
     MixtureReLU,
+    MixtureSigmoid,
     Tanh,
+    EvenExp,
 )
+
+import pytagi
+
+pytagi.manual_seed(42)
+# Set manual seed for reproducibility
+torch.manual_seed(42)
 
 TAGI_FNN = Sequential(
     Linear(784, 4096),
@@ -42,17 +50,18 @@ TAGI_CNN = Sequential(
 )
 
 TAGI_CNN_BATCHNORM = Sequential(
-    Conv2d(1, 32, 4, padding=1, in_width=28, in_height=28, bias=False),
+    Conv2d(1, 32, 4, padding=1, in_width=28, in_height=28, bias=False, gain_weight=0.1, gain_bias=0.1),
     ReLU(),
     BatchNorm2d(32),
     AvgPool2d(3, 2),
-    Conv2d(32, 64, 5, bias=False),
+    Conv2d(32, 64, 5, bias=False, gain_weight=0.1, gain_bias=0.1),
     ReLU(),
     BatchNorm2d(64),
     AvgPool2d(3, 2),
-    Linear(64 * 4 * 4, 256),
+    Linear(64 * 4 * 4, 256, gain_weight=0.1, gain_bias=0.1),
     ReLU(),
-    Linear(256, 10),
+    Linear(256, 10, gain_weight=0.1, gain_bias=0.1),
+    # EvenExp(),
 )
 
 
@@ -149,7 +158,7 @@ def custom_collate_fn(batch):
 
 
 def tagi_trainer(
-    batch_size: int, num_epochs: int, device: str = "cpu", sigma_v: float = 0.0
+    batch_size: int, num_epochs: int, device: str = "cpu", sigma_v: float = 0.05
 ):
     # Data loading and preprocessing
     transform = transforms.Compose(
@@ -197,7 +206,7 @@ def tagi_trainer(
 
         # Decaying observation's variance
         # sigma_v = exponential_scheduler(
-        #     curr_v=sigma_v, min_v=0.1, decaying_factor=0.99, curr_iter=epoch
+        #     curr_v=sigma_v, min_v=0.01, decaying_factor=0.99, curr_iter=epoch
         # )
         var_y = np.full(
             (batch_size * nb_classes,), sigma_v**2, dtype=np.float32
@@ -221,14 +230,6 @@ def tagi_trainer(
             #     delta_states=net.input_delta_z_buffer,
             # )
 
-            # out_updater.update(
-            #     output_states=net.output_z_buffer,
-            #     mu_obs=y,
-            #     var_obs=var_y,
-            #     delta_states=net.input_delta_z_buffer,
-            # )
-
-
             out_updater.update_remax(
                 output_states=net.output_z_buffer,
                 mu_obs=y,
@@ -236,9 +237,22 @@ def tagi_trainer(
                 delta_states=net.input_delta_z_buffer,
             )
 
+
+            # out_updater.update_heteros(
+            #     output_states=net.output_z_buffer,
+            #     mu_obs=y,
+            #     delta_states=net.input_delta_z_buffer,
+            # )
+
             print(f"mZ: {m_pred}")
             print(f"vZ: {v_pred}")
             m_pred, v_pred = net.get_outputs()
+            # v_pred = v_pred[::2] + m_pred[1::2]
+            # m_pred = m_pred[::2]
+
+            # ma, va = net.get_outputs()
+            # m_pred = np.exp(ma + 0.5 * va)
+            # v_pred = m_pred**2 * (np.exp(va) - 1)
             print(f"mA: {m_pred}")
             print(f"vA: {v_pred}")
             print(f"Sum m_pred: {np.sum(m_pred)}")
@@ -270,12 +284,23 @@ def tagi_trainer(
 
             out_updater.update_remax(
                 output_states=net.output_z_buffer,
-                mu_obs=np.full((len(labels) * nb_classes), 0, dtype=np.float32),
-                var_obs=np.full((len(labels) * nb_classes), 0, dtype=np.float32),
+                mu_obs=np.full((len(labels) * nb_classes), 0.0, dtype=np.float32),
+                var_obs=np.full((len(labels) * nb_classes), 0.0, dtype=np.float32),
                 delta_states=net.input_delta_z_buffer,
             )
 
+            # out_updater.update_heteros(
+            #     output_states=net.output_z_buffer,
+            #     mu_obs=np.full((len(labels) * nb_classes), 0, dtype=np.float32),
+            #     delta_states=net.input_delta_z_buffer,
+            # )
+
             m_pred, v_pred = net.get_outputs()
+            # v_pred = v_pred[::2] + m_pred[1::2]
+            # m_pred = m_pred[::2]
+            # ma, va = net.get_outputs()
+            # m_pred = np.exp(ma + 0.5 * va)
+            # v_pred = m_pred**2 * (np.exp(va) - 1)
 
             # Training metric
             # error_rate = metric.error_rate(m_pred, v_pred, labels)
@@ -294,6 +319,8 @@ def tagi_trainer(
             f"Epoch {epoch + 1}/{num_epochs} | training error: {avg_error_rate:.2f}% | test error: {test_error_rate * 100:.2f}%",
             refresh=True,
         )
+    # Save tagi model
+    net.save("models_bin/mnist_cnn.bin")
     print("Training complete.")
 
 
@@ -374,6 +401,7 @@ def torch_trainer(batch_size: int, num_epochs: int, device: str = "cpu"):
         pbar.set_description(
             f"Epoch# {epoch + 1}/{num_epochs}| training error: {avg_error_rate:.2f}% | Test error: {test_error_rate: .2f}%"
         )
+
 
 
 def main(

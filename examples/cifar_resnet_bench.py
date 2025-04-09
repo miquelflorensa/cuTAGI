@@ -227,7 +227,7 @@ def tagi_trainer(
 
     # Resnet18
     # net = TAGI_CNN_NET
-    net = resnet18_cifar10(gain_w=1.0, gain_b=1.0)
+    net = resnet18_cifar10(gain_w=0.083, gain_b=0.083)
     net.to_device(device)
     # net.set_threads(10)
     out_updater = OutputUpdater(net.device)
@@ -248,15 +248,15 @@ def tagi_trainer(
             print(l, 'E[ mu_w]±std: ',np.average(np.abs(state_dict[l][0])),' ± ' , np.std(state_dict[l][0]))
             print(l, 'E[std_w]±std: ',np.average(np.sqrt(state_dict[l][1])),' ± ' , np.std(np.sqrt(state_dict[l][1])))
         print('\n')
-        if epoch > 0:
-            sigma_v = exponential_scheduler(
-                curr_v=sigma_v, min_v=0, decaying_factor=1, curr_iter=epoch
-            )
-            var_y = np.full(
-                (batch_size * nb_classes,),
-                sigma_v**2,
-                dtype=np.float32,
-            )
+        # if epoch > 0:
+        #     sigma_v = exponential_scheduler(
+        #         curr_v=sigma_v, min_v=0.1, decaying_factor=1, curr_iter=epoch
+        #     )
+        #     var_y = np.full(
+        #         (batch_size * nb_classes,),
+        #         sigma_v**2,
+        #         dtype=np.float32,
+        #     )
         net.train()
         for x, labels in train_loader:
             # Feedforward and backward pass
@@ -286,29 +286,41 @@ def tagi_trainer(
             #     delta_states=net.input_delta_z_buffer,
             # )
 
-            y = np.full((len(labels) * nb_classes,), -1.0, dtype=np.float32)
+            y = np.full((len(labels) * nb_classes,), -5.0, dtype=np.float32)
             for i in range(len(labels)):
-                y[i * nb_classes + labels[i]] = 1.0
+                y[i * nb_classes + labels[i]] = 5.0
 
-            out_updater.update(
-                output_states=net.output_z_buffer,
-                mu_obs=y,
-                var_obs=var_y,
-                delta_states=net.input_delta_z_buffer,
-            )
+            # out_updater.update_remax(
+            #     output_states=net.output_z_buffer,
+            #     mu_obs=y,
+            #     var_obs=var_y,
+            #     delta_states=net.input_delta_z_buffer,
+            # )
 
             # Update parameters
-            net.backward()
-            net.step()
+            # net.backward()
+            # net.step()
 
-            out_updater.update_remax(
+            out_updater.update_heteros(
                 output_states=net.output_z_buffer,
-                mu_obs=np.full((len(labels) * nb_classes), 0, dtype=np.float32),
-                var_obs=np.full((len(labels) * nb_classes), 0, dtype=np.float32),
+                mu_obs=y,
                 delta_states=net.input_delta_z_buffer,
             )
 
-            m_pred, v_pred = net.get_outputs()
+            # print(f"mZ: {m_pred}")
+            # print(f"vZ: {v_pred}")
+            # m_pred, v_pred = net.get_outputs()
+            v_pred = v_pred[::2] + m_pred[1::2]
+            m_pred = m_pred[::2]
+            # m_pred = [m_pred[i] for i in range(len(m_pred)) if (i + 1) % 11 != 0]
+            # v_pred = [v_pred[i] for i in range(len(v_pred)) if (i + 1) % 11 != 0]
+
+            print(f"mA: {m_pred}")
+            print(f"vA: {v_pred}")
+            print(f"Sum m_pred: {np.sum(m_pred)}")
+
+            net.backward()
+            net.step()
 
             # Training metric
             # error_rate = metric.error_rate(m_pred, v_pred, labels)
@@ -318,7 +330,7 @@ def tagi_trainer(
                 pred = np.argmax(m_pred[i * 10 : (i + 1) * 10])
                 if pred != labels[i]:
                     error += 1
-                # print(f"Predicted: {pred} | Actual: {labels[i]}")
+                print(f"Predicted: {pred} | Actual: {labels[i]}")
 
             error_rates.append(error / len(labels))
 
@@ -332,14 +344,18 @@ def tagi_trainer(
         for x, labels in test_loader:
             m_pred, v_pred = net(x)
 
-            out_updater.update_remax(
-                output_states=net.output_z_buffer,
-                mu_obs=np.full((len(labels) * nb_classes), 0, dtype=np.float32),
-                var_obs=np.full((len(labels) * nb_classes), 0, dtype=np.float32),
-                delta_states=net.input_delta_z_buffer,
-            )
+            # out_updater.update_remax(
+            #     output_states=net.output_z_buffer,
+            #     mu_obs=np.full((len(labels) * nb_classes), 0, dtype=np.float32),
+            #     var_obs=np.full((len(labels) * nb_classes), 0.0, dtype=np.float32),
+            #     delta_states=net.input_delta_z_buffer,
+            # )
 
             m_pred, v_pred = net.get_outputs()
+            v_pred = v_pred[::2] + m_pred[1::2]
+            m_pred = m_pred[::2]
+            # m_pred = [m_pred[i] for i in range(len(m_pred)) if (i + 1) % 11 != 0]
+            # v_pred = [v_pred[i] for i in range(len(v_pred)) if (i + 1) % 11 != 0]
 
             # Training metric
             # error_rate = metric.error_rate(m_pred, v_pred, labels)
@@ -358,6 +374,8 @@ def tagi_trainer(
             f"Epoch {epoch + 1}/{num_epochs} | training error: {avg_error_rate:.2f}% | test error: {test_error_rate * 100:.2f}%",
             refresh=True,
         )
+
+    net.save("models_bin/cifar_resnet_50_5.bin")
     print("Training complete.")
 
 
@@ -434,7 +452,7 @@ def main(
     batch_size: int = 128,
     epochs: int = 50,
     device: str = "cuda",
-    sigma_v: float = 0.01,
+    sigma_v: float = 0.05,
 ):
     if framework == "torch":
         torch_trainer(batch_size=batch_size, num_epochs=epochs, device=device)

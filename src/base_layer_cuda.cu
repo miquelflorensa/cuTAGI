@@ -69,12 +69,13 @@ __global__ void device_weight_update(float const *delta_mu_w,
         delta_var_sign = (tmp_var > 0) - (tmp_var < 0);
         delta_bar = powf(var_w[col], 0.5) / cap_factor_udapte;
 
-        //mu_w[col] += delta_mu_w[col] / 100.0f;
-        //var_w[col] += delta_var_w[col] / 100.0f;
+        // mu_w[col] += delta_mu_w[col] / 100.0f;
+        // var_w[col] += delta_var_w[col] / 100.0f;
         mu_w[col] += delta_mu_sign * min(sqrt(tmp_mu * tmp_mu), delta_bar);
-        var_w[col] += delta_var_sign * min(sqrt(tmp_var * tmp_var), delta_bar*delta_bar);
+        var_w[col] += delta_var_sign *
+                      min(sqrt(tmp_var * tmp_var), delta_bar * delta_bar);
         if (var_w[col] <= 0.0f) {
-            var_w[col] = 1E-5f;
+            var_w[col] = 1E-9f;
             // printf("w"); //Constrain printout for debugging
         }
     }
@@ -94,12 +95,13 @@ __global__ void device_bias_update(float const *delta_mu_b,
         delta_var_sign = (delta_var_b[col] > 0) - (delta_var_b[col] < 0);
         delta_bar = powf(var_b[col], 0.5) / cap_factor_udapte;
 
-        //mu_b[col] += delta_mu_b[col] / 100.0f;
-        //var_b[col] += delta_var_b[col] / 100.0f;
+        // mu_b[col] += delta_mu_b[col] / 100.0f;
+        // var_b[col] += delta_var_b[col] / 100.0f;
         mu_b[col] += delta_mu_sign * min(fabsf(delta_mu_b[col]), delta_bar);
-        var_b[col] += delta_var_sign * min(fabsf(delta_var_b[col]), delta_bar*delta_bar);
+        var_b[col] += delta_var_sign *
+                      min(fabsf(delta_var_b[col]), delta_bar * delta_bar);
         if (var_b[col] <= 0.0f) {
-            var_b[col] = 1E-5f;
+            var_b[col] = 1E-9f;
             // printf("b"); //Constrain printout for debugging
         }
     }
@@ -192,6 +194,26 @@ void BaseLayerCuda::update_weights()
     unsigned int num_add_threads = 256;
     unsigned int blocks =
         (this->num_weights + num_add_threads - 1) / num_add_threads;
+
+
+    // this->delta_params_to_host();
+
+    // // Compute average of d_delta_var_w
+    // float average = 0.0f;
+    // for (int i = 0; i < this->num_weights; i++) {
+    //     average += this->delta_var_w[i];
+    // }
+    // average /= this->num_weights;
+
+    // for (int i = 0; i < this->num_weights; i++) {
+    //     this->delta_var_w[i] = average;
+    // }
+
+    // // Delta params to device
+    // cudaMemcpy(this->d_delta_mu_w, this->delta_mu_w.data(),
+    //            this->num_weights * sizeof(float), cudaMemcpyHostToDevice);
+    // cudaMemcpy(this->d_delta_var_w, this->delta_var_w.data(),
+    //             this->num_weights * sizeof(float), cudaMemcpyHostToDevice);
 
     device_weight_update<<<blocks, num_add_threads>>>(
         this->d_delta_mu_w, this->d_delta_var_w, this->cap_factor_update,

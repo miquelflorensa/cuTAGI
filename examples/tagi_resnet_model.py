@@ -8,6 +8,8 @@ from pytagi.nn import (
     ResNetBlock,
     Sequential,
     ReLU,
+    MixtureSigmoid,
+    EvenExp,
 )
 import numpy as np
 
@@ -132,6 +134,89 @@ def resnet18_cifar10(gain_w: float = 1, gain_b: float = 1) -> Sequential:
     ]
 
     final_layers = [AvgPool2d(4), Linear(512, 10, gain_weight=gain_w, gain_bias=gain_b, init_method="he")]
+
+    return Sequential(*initial_layers, *resnet_layers, *final_layers)
+
+def resnet18_cifar100(gain_w: float = 1, gain_b: float = 1) -> Sequential:
+    """Resnet18 architecture for cifar100"""
+    # 32x32
+    initial_layers = [
+        Conv2d(
+            3,
+            64,
+            3,
+            bias=False,
+            padding=1,
+            in_width=32,
+            in_height=32,
+            gain_weight=gain_w,
+            init_method="he",
+        ),
+        MixtureReLU(),
+        BatchNorm2d(64),
+    ]
+
+    resnet_layers = [
+        # 32x32
+        ResNetBlock(make_layer_block(64, 64, gain_weight=gain_w)),
+        ResNetBlock(make_layer_block(64, 64, gain_weight=gain_w)),
+        # 16x16
+        ResNetBlock(
+            make_layer_block(64, 128, 2, 2, gain_weight=gain_w),
+            LayerBlock(
+                Conv2d(
+                    64,
+                    128,
+                    2,
+                    bias=False,
+                    stride=2,
+                    gain_weight=gain_w,
+                    init_method="he",
+                ),
+                MixtureReLU(),
+                BatchNorm2d(128),
+            ),
+        ),
+        ResNetBlock(make_layer_block(128, 128, gain_weight=gain_w)),
+        # 8x8
+        ResNetBlock(
+            make_layer_block(128, 256, 2, 2, gain_weight=gain_w),
+            LayerBlock(
+                Conv2d(
+                    128,
+                    256,
+                    2,
+                    bias=False,
+                    stride=2,
+                    gain_weight=gain_w,
+                    init_method="he",
+                ),
+                MixtureReLU(),
+                BatchNorm2d(256),
+            ),
+        ),
+        ResNetBlock(make_layer_block(256, 256, gain_weight=gain_w)),
+        # 4x4
+        ResNetBlock(
+            make_layer_block(256, 512, 2, 2, gain_weight=gain_w),
+            LayerBlock(
+                Conv2d(
+                    256,
+                    512,
+                    2,
+                    bias=False,
+                    stride=2,
+                    gain_weight=gain_w,
+                    init_method="he",
+                ),
+                MixtureReLU(),
+                BatchNorm2d(512),
+            ),
+        ),
+        ResNetBlock(make_layer_block(512, 512, gain_weight=gain_w)),
+    ]
+
+    final_layers = [AvgPool2d(4), Linear(512, 100, gain_weight=gain_w, gain_bias=gain_b, init_method="he")]
 
     return Sequential(*initial_layers, *resnet_layers, *final_layers)
 

@@ -3,6 +3,11 @@
 *.vscode
 *.json
 *.csv
+*.log
+*.txt
+*.png
+*.out
+*.bin
 debug_data/
 saved_param/
 kernel_playground/

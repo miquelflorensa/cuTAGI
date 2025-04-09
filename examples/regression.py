@@ -36,7 +36,7 @@ def main(num_epochs: int = 50, batch_size: int = 10, sigma_v: float = 0.2):
         ReLU(),
         Linear(50, 1),
     )
-    # net.to_device("cuda")
+    net.to_device("cuda")
     # net.set_threads(8)
 
     out_updater = OutputUpdater(net.device)
