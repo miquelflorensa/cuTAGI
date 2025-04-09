@@ -352,7 +352,6 @@ def tagi_trainer(
             count += 1
 
 
-
         # ma, va = net.get_outputs()
         # m_pred = np.exp(ma + 0.5 * va)
         # v_pred = m_pred**2 * (np.exp(va) - 1)
