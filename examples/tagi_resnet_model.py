@@ -133,7 +133,7 @@ def resnet18_cifar10(gain_w: float = 1, gain_b: float = 1) -> Sequential:
         ResNetBlock(make_layer_block(512, 512, gain_weight=gain_w)),
     ]
 
-    final_layers = [AvgPool2d(4), Linear(512, 10, gain_weight=gain_w, gain_bias=gain_b, init_method="he")]
+    final_layers = [AvgPool2d(4), Linear(512, 20, gain_weight=gain_w, gain_bias=gain_b, init_method="he"), EvenExp()]
 
     return Sequential(*initial_layers, *resnet_layers, *final_layers)
 
@@ -216,7 +216,7 @@ def resnet18_cifar100(gain_w: float = 1, gain_b: float = 1) -> Sequential:
         ResNetBlock(make_layer_block(512, 512, gain_weight=gain_w)),
     ]
 
-    final_layers = [AvgPool2d(4), Linear(512, 100, gain_weight=gain_w, gain_bias=gain_b, init_method="he")]
+    final_layers = [AvgPool2d(4), Linear(512, 101, gain_weight=gain_w, gain_bias=gain_b, init_method="he")]
 
     return Sequential(*initial_layers, *resnet_layers, *final_layers)
 

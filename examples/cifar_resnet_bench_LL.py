@@ -310,8 +310,8 @@ def tagi_trainer(
             print(f"mZ: {m_pred}")
             print(f"vZ: {v_pred}")
             m_pred, v_pred = net.get_outputs()
-            # v_pred = v_pred[::2] + m_pred[1::2]
-            # m_pred = m_pred[::2]
+            v_pred = v_pred[::2] + m_pred[1::2]
+            m_pred = m_pred[::2]
             # m_pred = [m_pred[i] for i in range(len(m_pred)) if (i + 1) % 11 != 0]
             # v_pred = [v_pred[i] for i in range(len(v_pred)) if (i + 1) % 11 != 0]
 
@@ -352,8 +352,8 @@ def tagi_trainer(
             )
 
             m_pred, v_pred = net.get_outputs()
-            # v_pred = v_pred[::2] + m_pred[1::2]
-            # m_pred = m_pred[::2]
+            v_pred = v_pred[::2] + m_pred[1::2]
+            m_pred = m_pred[::2]
             # m_pred = [m_pred[i] for i in range(len(m_pred)) if (i + 1) % 11 != 0]
             # v_pred = [v_pred[i] for i in range(len(v_pred)) if (i + 1) % 11 != 0]
 
@@ -375,7 +375,7 @@ def tagi_trainer(
             refresh=True,
         )
 
-    net.save("models_bin/cifar_resnet_50_LL.bin")
+    net.save("models_bin/cifar_resnet_50_LL_TAGI-V.bin")
     print("Training complete.")
 
 

@@ -1246,18 +1246,18 @@ __global__ void remax_forward_cuda(float *mu_m, float *var_m, int no, int B,
         int j = idx % no;  // Output index
 
         // Add for TAGI-V
-        // if (idx % 2 == 0) {
-            // atomicAdd(&sum_mu_global[i], mu_m[idx]);
-            // atomicAdd(&sum_var_global[i], var_m[idx]);
-        // }
+        if (idx % 2 == 0) {
+            atomicAdd(&sum_mu_global[i], mu_m[idx]);
+            atomicAdd(&sum_var_global[i], var_m[idx]);
+        }
 
         // Ensure mu_m and var_m have minimum values
         // mu_m[idx] = fmaxf(1e-12f, mu_m[idx]);
         // var_m[idx] = fmaxf(1e-6f, var_m[idx]);
 
         // Compute partial sums for the batch
-        atomicAdd(&sum_mu_global[i], mu_m[idx]);
-        atomicAdd(&sum_var_global[i], var_m[idx]);
+        // atomicAdd(&sum_mu_global[i], mu_m[idx]);
+        // atomicAdd(&sum_var_global[i], var_m[idx]);
     }
 }
 

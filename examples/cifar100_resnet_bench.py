@@ -174,10 +174,10 @@ def load_datasets(batch_size: int, framework: str = "tagi"):
     )
 
     train_set = torchvision.datasets.CIFAR100(
-        root="./data/cifar", train=True, download=True, transform=transform_train
+        root="./data/cifar100", train=True, download=True, transform=transform_train
     )
     test_set = torchvision.datasets.CIFAR100(
-        root="./data/cifar", train=False, download=True, transform=transform_test
+        root="./data/cifar100", train=False, download=True, transform=transform_test
     )
 
     if framework == "torch":
@@ -227,7 +227,7 @@ def tagi_trainer(
 
     # Resnet18
     # net = TAGI_CNN_NET
-    net = resnet18_cifar100(gain_w=0.083, gain_b=1.0)
+    net = resnet18_cifar100(gain_w=0.083, gain_b=0.1)
     net.to_device(device)
     # net.set_threads(10)
     out_updater = OutputUpdater(net.device)
@@ -452,7 +452,7 @@ def main(
     batch_size: int = 128,
     epochs: int = 50,
     device: str = "cuda",
-    sigma_v: float = 0.05,
+    sigma_v: float = 0.1,
 ):
     if framework == "torch":
         torch_trainer(batch_size=batch_size, num_epochs=epochs, device=device)

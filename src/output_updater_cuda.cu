@@ -48,10 +48,10 @@ __global__ void update_delta_z_cuda(float const *mu_a, float const *var_a,
 }
 
 __global__ void update_delta_z_cuda_heteros(float const *mu_a,
-                                            float const *var_a,
-                                            float const *jcb, float const *obs,
-                                            int size, float *delta_mu,
-                                            float *delta_var) {
+    float const *var_a,
+    float const *jcb, float const *obs,
+    int size, float *delta_mu,
+    float *delta_var) {
     /*
     Compute delta hidden states for output layer with learned heteroscedastic
     noise. This function receives a vector of observations and the twice
@@ -88,7 +88,7 @@ __global__ void update_delta_z_cuda_heteros(float const *mu_a,
         // Compute the prior predictive PDF for v2
         float mu_v2 = mu_v2_bar_tilde;
         float var_v2 =
-            3.0f * var_v2_bar_tilde + 2.0f * mu_v2_bar_tilde * mu_v2_bar_tilde;
+        3.0f * var_v2_bar_tilde + 2.0f * mu_v2_bar_tilde * mu_v2_bar_tilde;
         float cov_y_v = mu_v2;
 
         // Variance of the output
@@ -114,20 +114,123 @@ __global__ void update_delta_z_cuda_heteros(float const *mu_a,
         // Compute the posterior mean and variance for V2
         float mu_v2_post = mu_v_post * mu_v_post + var_v_post;
         float var_v2_post = 2.0f * var_v_post * var_v_post +
-                            4.0f * var_v_post * mu_v_post * mu_v_post;
+        4.0f * var_v_post * mu_v_post * mu_v_post;
 
         // Compute the posterior mean and variance for V2_bar_tilde
         float tmp_ratio = var_v2_bar_tilde / var_v2;
         float mu_v2_bar_tilde_post =
-            mu_v2_bar_tilde + tmp_ratio * (mu_v2_post - mu_v2);
+        mu_v2_bar_tilde + tmp_ratio * (mu_v2_post - mu_v2);
         float var_v2_bar_tilde_post =
-            var_v2_bar_tilde + tmp_ratio * tmp_ratio * (var_v2_post - var_v2);
+        var_v2_bar_tilde + tmp_ratio * tmp_ratio * (var_v2_post - var_v2);
 
         // Compute update for V2_bar
         float jv = cov_v2_bar_tilde / var_v2_bar_tilde;
         delta_mu[obs_col + 1] = jv * (mu_v2_bar_tilde_post - mu_v2_bar_tilde);
         delta_var[obs_col + 1] =
-            jv * jv * (var_v2_bar_tilde_post - var_v2_bar_tilde);
+        jv * jv * (var_v2_bar_tilde_post - var_v2_bar_tilde);
+    }
+}
+
+
+__global__ void update_delta_z_cuda_heteros_softmax(float const *mu_a,
+    float const *var_a,
+    float const *jcb, float const *obs,
+    int size, float *delta_mu,
+    float *delta_var, float *mu_zv, float *var_zv, float *var_z) {
+    /*
+    Compute delta hidden states for output layer with learned heteroscedastic
+    noise. This function receives a vector of observations and the twice
+    output hidden states. Using AGVI, we can infere the posterior for
+    observation noise v and use it to update the hidden states Z_out.
+
+    Terminology:
+    - V: Gaussian random variable describing the error variance sigma^2. N(0,
+    sqrt(V))
+    - V2: Square of the error (V^2)
+    - V2_bar: Gaussian random variable describing the expected value of V2
+    (mu_V2)
+    - V2_bar_tilde: Gaussian random variable describing V2 after passing through
+    an exponential activation function to restrict values to the positive domain
+    - ZV: Z_out + V; N(mu_z, var_v)
+    */
+    const float zero_pad = 0.0f;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+    // Output layer will have twice the size of the common one because one is
+    // representing the mean and the other the variance. A contains twice the
+    // number of observations, the even positions corresponds to Z_out and the
+    // odd positions corresponds to V2_bar_tilde
+    int obs_col = col * 2;
+
+    if (col < size) {
+        // Z_out
+        float var_a_col = var_a[obs_col];
+        float mu_a_col = mu_a[obs_col];
+        float jcb_col = jcb[obs_col];
+
+        // V2_bar_tilde
+        float mu_v2_bar_tilde = mu_a[obs_col + 1];
+        float var_v2_bar_tilde = var_a[obs_col + 1];
+        float cov_v2_bar_tilde = jcb[obs_col + 1];
+
+        // Compute the prior predictive PDF for v2
+        float mu_v2 = mu_v2_bar_tilde;
+        float var_v2 =
+        3.0f * var_v2_bar_tilde + 2.0f * mu_v2_bar_tilde * mu_v2_bar_tilde;
+        float cov_y_v = mu_v2;
+
+        float mu_v = 0.0f;
+        float var_v = mu_v2;
+
+        // Variance of the output
+        float var_sum = var_a_col;
+
+        // Compute updating quantities for the mean of the output
+        float tmp1 = jcb_col / (var_a_col + 0.0001f);
+        float tmp2 = jcb_col / (var_a_col + 0.0001f);
+
+
+        float mu_zv_post = mu_zv[obs_col];
+        float var_zv_post = var_zv[obs_col];
+
+        if (std::isinf(tmp1) || std::isnan(tmp1) || std::isinf(tmp2) || std::isnan(tmp2)) {
+            delta_mu[obs_col] = zero_pad;
+            delta_var[obs_col] = zero_pad;
+        } else {
+            float obs_diff = obs[col] - mu_a_col;
+            // Compute the posterior mean and variance for ZV
+            mu_zv_post += tmp2 * obs_diff;
+            var_zv_post -= tmp1 * jcb_col;
+        }
+
+        // Compute deltas for Z
+        float Jz_mu = 1.0f / (0.001f * var_zv[obs_col]);
+        float Jz = 1.0f / (var_zv[obs_col]);
+        delta_mu[obs_col] = Jz_mu * (mu_zv_post - mu_zv[obs_col]);
+        delta_var[obs_col] = Jz * Jz * (var_zv_post - var_zv[obs_col]);
+
+        // Smooth back V given ZV
+        float Jv = var_v / (var_zv[obs_col]);
+        float Jv_mu = var_v / 0.01f;
+        float mu_v_post = mu_v + Jv * (mu_zv_post - mu_zv[obs_col]);
+        float var_v_post = var_v + Jv * Jv * (var_zv_post - var_zv[obs_col]);
+
+        // Compute the posterior mean and variance for V2
+        float mu_v2_post = mu_v_post * mu_v_post + var_v_post;
+        float var_v2_post = 2.0f * var_v_post * var_v_post +
+        4.0f * var_v_post * mu_v_post * mu_v_post;
+
+        // Compute the posterior mean and variance for V2_bar_tilde
+        float tmp_ratio = var_v2_bar_tilde / var_v2;
+        float mu_v2_bar_tilde_post =
+        mu_v2_bar_tilde + tmp_ratio * (mu_v2_post - mu_v2);
+        float var_v2_bar_tilde_post =
+        var_v2_bar_tilde + tmp_ratio * tmp_ratio * (var_v2_post - var_v2);
+
+        // Compute update for V2_bar
+        float jv2 = cov_v2_bar_tilde / var_v2_bar_tilde;
+        delta_mu[obs_col + 1] = jv2 * (mu_v2_bar_tilde_post - mu_v2_bar_tilde);
+        delta_var[obs_col + 1] =
+        jv2 * jv2 * (var_v2_bar_tilde_post - var_v2_bar_tilde);
     }
 }
 
@@ -433,11 +536,14 @@ __global__ void mixture_celu_mean_var_cuda(const float *mu_z, const float *s2_z,
                                            int num_states, float *mu_a,
                                            float *var_a, float *cov_za)
 {
-    float alpha = 1.0f;
+    float scale = 1.0f;
     int col = blockIdx.x * blockDim.x + threadIdx.x;
     constexpr float EPSILON = 1e-6f;
 
     if (col < num_states) {
+        if (col % 2 != 0) {
+            return;
+        }
         float mz = mu_z[col];
         float var_z = s2_z[col];
         float sz = powf(var_z, 0.5f);
@@ -487,23 +593,30 @@ __global__ void mixture_celu_mean_var_cuda(const float *mu_z, const float *s2_z,
 
 
         // Local Linearization
-        float delta = 1.0f / alpha;
+        float delta = 1.0f / scale;
         float z = mz + delta;
-        z *= alpha;
+        z *= scale;
 
+        float a = 0.0f;
         float diff = 0.0f;
 
-        if (z >= 1.0f) diff = 1.0f;
-        else diff = expf(z - 1.0f);
+        if (z >= 1.0f) {
+            a = z;
+            diff = 1.0f;
+        }
+        else {
+            a = expf(z - 1.0f);
+            diff = expf(z - 1.0f);
+        }
 
-        diff /= alpha;
+        a /= scale;
+        diff /= scale;
 
-        mu_a[col] = mz;
+        // printf("mu_celu[%d]: %f\n", col, a);
+        // printf("var_celu[%d]: %f\n", col, var_z * diff * diff);
+        mu_a[col] = a;
         var_a[col] = diff * diff * var_z;
-        cov_za[col] = diff;
-
-
-
+        cov_za[col] = diff * var_z;
     }
 }
 
@@ -592,43 +705,44 @@ __global__ void compute_softmax_outputs(float *mu_z, float *var_z,
                                         int no, int B) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < B * no) {
-        // if (idx % 2 == 0) {
-        int i = idx / no;
-        int j = idx % no;
+        if (idx % 2 == 0) {
+            int i = idx / no;
+            int j = idx % no;
 
-        float varZ = var_zv[idx];
-        float muZ = mu_zv[idx];
+            float varZ = var_zv[idx];
+            float muZ = mu_zv[idx];
 
-        float muE = mu_e[idx];
-        float varE = var_e[idx];
+            float muE = mu_e[idx];
+            float varE = var_e[idx];
 
-        float sum_muE = sum_mu_global[i];
-        float sum_varE = sum_var_global[i];
+            float sum_muE = sum_mu_global[i];
+            float sum_varE = sum_var_global[i];
 
-        // E_sum^{-1} = 1/E_sum
-        float mEsum_inv = 1.0f / sum_muE;
-        float s2Esum_inv = 1.0f / (sum_muE * sum_muE * sum_muE * sum_muE) *
-                           sum_varE;
-        float covE_sumE_sum_inv =
-            -1.0f / (sum_muE * sum_muE) * sum_varE;
-        // float covEE_sum_inv = -1.0f / (sum_muE * sum_muE) * sum_varE;
-        float covEE_sum_inv = 0.0f;  // Test -> not the right theoretical solution
+            // E_sum^{-1} = 1/E_sum
+            float mEsum_inv = 1.0f / sum_muE;
+            float s2Esum_inv = 1.0f / (sum_muE * sum_muE * sum_muE * sum_muE) *
+                            sum_varE;
+            float covE_sumE_sum_inv =
+                -1.0f / (sum_muE * sum_muE) * sum_varE;
+            // float covEE_sum_inv = -1.0f / (sum_muE * sum_muE) * sum_varE;
+            float covEE_sum_inv = 0.0f;  // Test -> not the right theoretical solution
 
-        // float covZE_sum_inv = -1.0f / (sum_muE * sum_muE) * cov_e[idx];
-        float covZE_sum_inv = 0.0f;  // Test -> not the right theoretical solution
+            // float covZE_sum_inv = -1.0f / (sum_muE * sum_muE) * cov_e[idx];
+            float covZE_sum_inv = 0.0f;  // Test -> not the right theoretical solution
 
-        // A_i = normal
-        float mA = muE * mEsum_inv + covEE_sum_inv;
-        float s2A = varE * s2Esum_inv + covEE_sum_inv * covEE_sum_inv +
-                    2.0f * covEE_sum_inv * muE * mEsum_inv +
-                    s2Esum_inv * muE * muE + varE * mEsum_inv * mEsum_inv;
-        // float sA = sqrtf(s2A);
+            // A_i = normal
+            float mA = muE * mEsum_inv + covEE_sum_inv;
+            float s2A = varE * s2Esum_inv + covEE_sum_inv * covEE_sum_inv +
+                        2.0f * covEE_sum_inv * muE * mEsum_inv +
+                        s2Esum_inv * muE * muE + varE * mEsum_inv * mEsum_inv;
+            // float sA = sqrtf(s2A);
 
-        float cov_ZA = cov_e[idx] * mEsum_inv + covZE_sum_inv * muE;
+            float cov_ZA = cov_e[idx] * mEsum_inv + covZE_sum_inv * muE;
 
-        d_mu_a[idx] = mA;
-        d_var_a[idx] = s2A;
-        d_jcb[idx] = cov_ZA;
+            d_mu_a[idx] = mA;
+            d_var_a[idx] = s2A;
+            d_jcb[idx] = cov_ZA;
+        }
     }
 }
 
@@ -837,6 +951,14 @@ __global__ void add_var_obs_to_var_a(float *d_mu_a, float *d_var_a, float *d_jcb
         // d_mu_a[idx] = a * d_mu_a[idx];
         // d_var_a[idx] = a * a * d_var_a[idx];
         // d_jcb[idx] = a;
+        if (idx % 2 == 0) {
+            // printf("d_var_a[%d]: %f\n", idx, d_var_a[idx]);
+            // printf("d_mu_a[%d + 1]: %f\n", idx, d_mu_a[idx + 1]);
+            d_var_a[idx] += d_mu_a[idx+1];
+            // d_var_a[idx] += 0.001f;
+            // d_mu_a[idx + 1] = 0.01f;
+            // d_var_a[idx + 1] = 0.01f;
+        }
     }
 }
 
@@ -863,7 +985,7 @@ void OutputUpdaterCuda::update_output_delta_z_remax(
     // no: Number of outputs per mini-batch
 
     // In case of TAGI-V
-    // no = no * 2;
+    no = no * 2;
 
     int num_states = no * B;
     int blocks =
@@ -881,9 +1003,9 @@ void OutputUpdaterCuda::update_output_delta_z_remax(
     cudaMemset(max_var, 0, B * sizeof(float));
 
     // Compute max variance for each mini-batch
-    compute_max_var<<<blocks, this->num_cuda_threads>>>(
-        var_z, max_var, no, B);
-    cudaDeviceSynchronize();
+    // compute_max_var<<<blocks, this->num_cuda_threads>>>(
+    //     var_z, max_var, no, B);
+    // cudaDeviceSynchronize();
 
     add_var_obs_to_var_a<<<blocks, this->num_cuda_threads>>>(
         cu_output_states->d_mu_a, cu_output_states->d_var_a,
@@ -910,7 +1032,7 @@ void OutputUpdaterCuda::update_output_delta_z_remax(
 
     // CELU
     mixture_celu_mean_var_cuda<<<blocks, this->num_cuda_threads>>>(
-        mu_z, var_z, no * B, cu_output_states->d_mu_a,
+        mu_zv, var_zv, no * B, cu_output_states->d_mu_a,
         cu_output_states->d_var_a, cu_output_states->d_jcb);
 
     cudaDeviceSynchronize();
@@ -997,15 +1119,15 @@ void OutputUpdaterCuda::update_output_delta_z_remax(
     //     num_states, cu_delta_states->d_delta_mu, cu_delta_states->d_delta_var,
     //     mu_zv, var_zv, jcb_zv, mu_z, var_z, mu_e, var_e, full_jcb, no);
 
-    // update_delta_z_cuda_heteros<<<blocks, this->num_cuda_threads>>>(
-    //     cu_output_states->d_mu_a, cu_output_states->d_var_a,
-    //     cu_output_states->d_jcb, cu_obs->d_mu_obs, num_states,
-    //     cu_delta_states->d_delta_mu, cu_delta_states->d_delta_var);
-
-    update_delta_z_cuda<<<blocks, this->num_cuda_threads>>>(
+    update_delta_z_cuda_heteros_softmax<<<blocks, this->num_cuda_threads>>>(
         cu_output_states->d_mu_a, cu_output_states->d_var_a,
-        cu_output_states->d_jcb, cu_obs->d_mu_obs, cu_obs->d_var_obs,
-        num_states, cu_delta_states->d_delta_mu, cu_delta_states->d_delta_var);
+        cu_output_states->d_jcb, cu_obs->d_mu_obs, num_states,
+        cu_delta_states->d_delta_mu, cu_delta_states->d_delta_var, mu_zv, var_zv, var_z);
+
+    // update_delta_z_cuda<<<blocks, this->num_cuda_threads>>>(
+    //     cu_output_states->d_mu_a, cu_output_states->d_var_a,
+    //     cu_output_states->d_jcb, cu_obs->d_mu_obs, cu_obs->d_var_obs,
+    //     num_states, cu_delta_states->d_delta_mu, cu_delta_states->d_delta_var);
 
     cudaDeviceSynchronize();
 

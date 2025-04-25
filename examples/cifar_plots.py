@@ -156,7 +156,7 @@ def plot_class_uncertainty(image_idx, images, m_preds, v_preds, v_preds_epistemi
     ax_probs.legend(handles=legend_elements, loc='upper right')
 
     plt.tight_layout()
-    plt.savefig(f'./images_cifar_5/cifar_{image_idx}_probs.png', bbox_inches='tight')
+    plt.savefig(f'./images_cifar_LL/cifar_{image_idx}_probs.png', bbox_inches='tight')
     plt.close()  # Prevent memory leaks
 
 
@@ -329,7 +329,7 @@ def tagi_trainer(
 
 
 
-    net.load("models_bin/cifar_resnet_50_5.bin")
+    net.load("models_bin/cifar_resnet_50.bin")
 
     # Testing
     test_error_rates = []
@@ -372,176 +372,211 @@ def tagi_trainer(
     print(f"Test Error Rate: {test_error_rate * 100:.2f}%")
     print(f"Sum of m_pred: {np.sum(m_pred)}")
 
-    # Build arrays
-    N = len(m_preds)
-    accuracy_array = np.array([1 - err for err in test_error_rates])
+    # assume m_preds, v_preds, v_preds_aleatoric, v_preds_epistemic are already populated
+    # Number of classes
+    n_classes = 10
 
-    # Aggregate uncertainties
-    epistemic_uncertainty = np.array([
-        np.mean(v_preds_epistemic[i]) for i in range(N)
-    ])
-    aleatoric_uncertainty = np.array([
-        np.mean(v_preds_aleatoric[i]) for i in range(N)
-    ])
+    # 1. Gather (sample_key, uncertainty) for each sample,
+    #    where uncertainty = total var at the predicted class
+    keys = sorted(m_preds.keys())
+    uncert_list = []
+    for k in keys:
+        m_vec = m_preds[k]
+        total_v = v_preds[k]
+        pred = np.argmax(m_vec)
+        uncert_list.append((k, total_v[pred]))
 
-    # Classification results
-    correct_unc_epistemic = [np.mean(v_preds_epistemic[i]) for i in range(N) if accuracy_array[i] == 1]
-    wrong_unc_epistemic   = [np.mean(v_preds_epistemic[i]) for i in range(N) if accuracy_array[i] == 0]
+    # 2. Sort by descending uncertainty and take top 20%
+    uncert_list.sort(key=lambda x: x[1], reverse=True)
+    top_n = int(len(uncert_list) * 0.05)
+    top_keys = [k for k, _ in uncert_list[:top_n]]
 
-    correct_unc_aleatoric = [np.mean(v_preds_aleatoric[i]) for i in range(N) if accuracy_array[i] == 1]
-    wrong_unc_aleatoric   = [np.mean(v_preds_aleatoric[i]) for i in range(N) if accuracy_array[i] == 0]
+    # 3. For each class, compute corr(mean, aleatoric_var) and corr(mean, epistemic_var)
+    print(f"Using top {top_n} ({100 * 0.05:.0f}%) most‐uncertain samples:\n")
+    print(f"{'Class':>5} | {'r(mean, aleatoric)':>18} | {'r(mean, epistemic)':>18}")
+    print("-" * 50)
+    for cls in range(n_classes):
+        # build arrays only over the filtered samples
+        mean_cls = np.array([m_preds[k][cls] for k in top_keys])
+        alea_cls = np.array([v_preds_aleatoric[k][cls] for k in top_keys])
+        epi_cls  = np.array([v_preds_epistemic[k][cls] for k in top_keys])
 
-    # Optional: remove extreme outliers
-    def filter_percentile(data, percentile=99):
-        thresh = np.percentile(data, percentile)
-        return [v for v in data if v <= thresh]
+        r_alea = np.corrcoef(mean_cls, alea_cls)[0, 1]
+        r_epi  = np.corrcoef(mean_cls, epi_cls)[0, 1]
 
-    correct_unc_epistemic = filter_percentile(correct_unc_epistemic)
-    wrong_unc_epistemic   = filter_percentile(wrong_unc_epistemic)
-    correct_unc_aleatoric = filter_percentile(correct_unc_aleatoric)
-    wrong_unc_aleatoric   = filter_percentile(wrong_unc_aleatoric)
-
-    # Aggregate statistics
-    def summarize(data):
-        data = np.array(data)
-        return np.mean(data), np.std(data)
-
-    # Epistemic stats
-    mean_epi_correct, std_epi_correct = summarize(correct_unc_epistemic)
-    mean_epi_wrong, std_epi_wrong = summarize(wrong_unc_epistemic)
-
-    # Aleatoric stats
-    mean_ale_correct, std_ale_correct = summarize(correct_unc_aleatoric)
-    mean_ale_wrong, std_ale_wrong = summarize(wrong_unc_aleatoric)
-
-    # Data for plots
-    labels = ['Correct', 'Incorrect']
-
-    means_epistemic = [mean_epi_correct, mean_epi_wrong]
-    errors_epistemic = [std_epi_correct, std_epi_wrong]
-
-    means_aleatoric = [mean_ale_correct, mean_ale_wrong]
-    errors_aleatoric = [std_ale_correct, std_ale_wrong]
-
-    x = np.arange(len(labels))
-    width = 0.6
-
-    # Plot
-    fig, axs = plt.subplots(1, 2, figsize=(10, 5))
-
-    # Epistemic
-    axs[0].bar(x, means_epistemic, yerr=errors_epistemic, capsize=10, alpha=0.7)
-    axs[0].set_xticks(x)
-    axs[0].set_xticklabels(labels)
-    axs[0].set_title("Epistemic Uncertainty")
-    axs[0].set_ylabel("Mean Uncertainty")
-
-    # Aleatoric
-    axs[1].bar(x, means_aleatoric, yerr=errors_aleatoric, capsize=10, alpha=0.7, color='orange')
-    axs[1].set_xticks(x)
-    axs[1].set_xticklabels(labels)
-    axs[1].set_title("Aleatoric Uncertainty")
-
-    plt.tight_layout()
-    plt.savefig("uncertainty_vs_accuracy.png")
-    plt.close()
+        print(f"{cls:5d} | {r_alea:18.4f} | {r_epi:18.4f}")
 
 
-    # Step 1: Compute predicted class, uncertainty, and true label
-    preds = []
-    trues = []
-    uncertainties = []
+    # # Build arrays
+    # N = len(m_preds)
+    # accuracy_array = np.array([1 - err for err in test_error_rates])
 
-    original_labels = np.array([int(label) for label in test_loader.dataset.targets])
+    # # Aggregate uncertainties
+    # epistemic_uncertainty = np.array([
+    #     np.mean(v_preds_epistemic[i]) for i in range(N)
+    # ])
+    # aleatoric_uncertainty = np.array([
+    #     np.mean(v_preds_aleatoric[i]) for i in range(N)
+    # ])
 
-    for i in range(N):
-        pred_class = np.argmax(m_preds[i])
-        unc = v_preds_aleatoric[i][pred_class]
-        preds.append(pred_class)
-        true_label = int(original_labels[i])  # use a safe source of ground-truth labels
-        trues.append(true_label)
-        uncertainties.append(unc)
+    # # Classification results
+    # correct_unc_epistemic = [np.mean(v_preds_epistemic[i]) for i in range(N) if accuracy_array[i] == 1]
+    # wrong_unc_epistemic   = [np.mean(v_preds_epistemic[i]) for i in range(N) if accuracy_array[i] == 0]
 
-    # Step 2: Filter high uncertainty predictions
-    uncertainties = np.array(uncertainties)
-    threshold = np.percentile(uncertainties, 80)
+    # correct_unc_aleatoric = [np.mean(v_preds_aleatoric[i]) for i in range(N) if accuracy_array[i] == 1]
+    # wrong_unc_aleatoric   = [np.mean(v_preds_aleatoric[i]) for i in range(N) if accuracy_array[i] == 0]
 
-    filtered_preds = []
-    filtered_trues = []
+    # # Optional: remove extreme outliers
+    # def filter_percentile(data, percentile=99):
+    #     thresh = np.percentile(data, percentile)
+    #     return [v for v in data if v <= thresh]
 
-    for i in range(N):
-        if uncertainties[i] > threshold:
-            filtered_preds.append(preds[i])
-            filtered_trues.append(trues[i])
+    # correct_unc_epistemic = filter_percentile(correct_unc_epistemic)
+    # wrong_unc_epistemic   = filter_percentile(wrong_unc_epistemic)
+    # correct_unc_aleatoric = filter_percentile(correct_unc_aleatoric)
+    # wrong_unc_aleatoric   = filter_percentile(wrong_unc_aleatoric)
 
-    # Step 3: Confusion matrix
-    cm = confusion_matrix(filtered_trues, filtered_preds, labels=range(10))
+    # # Aggregate statistics
+    # def summarize(data):
+    #     data = np.array(data)
+    #     return np.mean(data), np.std(data)
 
-    # Step 4: Plot
-    plt.figure(figsize=(8, 6))
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=CIFAR10_LABELS, yticklabels=CIFAR10_LABELS)
-    plt.xlabel('Predicted')
-    plt.ylabel('True')
-    plt.title('Confusion Matrix (Top 20% Aleatoric Uncertainty)')
-    plt.tight_layout()
-    plt.savefig("class_uncertainty_correlation.png")
-    plt.close()
+    # # Epistemic stats
+    # mean_epi_correct, std_epi_correct = summarize(correct_unc_epistemic)
+    # mean_epi_wrong, std_epi_wrong = summarize(wrong_unc_epistemic)
 
-    # Step 1: Compute predicted class + its uncertainty
-    predicted_classes = []
-    predicted_uncertainties = []
+    # # Aleatoric stats
+    # mean_ale_correct, std_ale_correct = summarize(correct_unc_aleatoric)
+    # mean_ale_wrong, std_ale_wrong = summarize(wrong_unc_aleatoric)
 
-    for i in range(N):
-        pred = np.argmax(m_preds[i])
-        unc = v_preds_aleatoric[i][pred]
-        predicted_classes.append(pred)
-        predicted_uncertainties.append(unc)
+    # # Data for plots
+    # labels = ['Correct', 'Incorrect']
 
-    # Step 2: Define the range of "high but not extreme" uncertainty
-    lower_thresh = np.percentile(predicted_uncertainties, 90)
-    upper_thresh = np.percentile(predicted_uncertainties, 99)
+    # means_epistemic = [mean_epi_correct, mean_epi_wrong]
+    # errors_epistemic = [std_epi_correct, std_epi_wrong]
 
-    # Step 3: Collect uncertainty vectors for high-but-not-extreme samples
-    class_unc_spillover = {c: [] for c in range(10)}  # c = predicted class
+    # means_aleatoric = [mean_ale_correct, mean_ale_wrong]
+    # errors_aleatoric = [std_ale_correct, std_ale_wrong]
 
-    for i in range(N):
-        pred = predicted_classes[i]
-        unc = predicted_uncertainties[i]
+    # x = np.arange(len(labels))
+    # width = 0.6
 
-        if lower_thresh < unc < upper_thresh:
-            class_unc_spillover[pred].append(np.sqrt(v_preds_aleatoric[i]))
+    # # Plot
+    # fig, axs = plt.subplots(1, 2, figsize=(10, 5))
 
-    # Step 4: Compute mean uncertainty vector per class
-    spillover_matrix = np.zeros((10, 10))
+    # # Epistemic
+    # axs[0].bar(x, means_epistemic, yerr=errors_epistemic, capsize=10, alpha=0.7)
+    # axs[0].set_xticks(x)
+    # axs[0].set_xticklabels(labels)
+    # axs[0].set_title("Epistemic Uncertainty")
+    # axs[0].set_ylabel("Mean Uncertainty")
 
-    for c in range(10):
-        vecs = class_unc_spillover[c]
-        if vecs:
-            spillover_matrix[c] = np.mean(np.stack(vecs), axis=0)
+    # # Aleatoric
+    # axs[1].bar(x, means_aleatoric, yerr=errors_aleatoric, capsize=10, alpha=0.7, color='orange')
+    # axs[1].set_xticks(x)
+    # axs[1].set_xticklabels(labels)
+    # axs[1].set_title("Aleatoric Uncertainty")
 
-
-    plt.figure(figsize=(8, 6))
-    sns.heatmap(spillover_matrix, annot=True, fmt=".2f", cmap="YlGnBu",
-                xticklabels=CIFAR10_LABELS, yticklabels=CIFAR10_LABELS)
-    plt.xlabel("Uncertainty On Class")
-    plt.ylabel("Predicted Class (High-but-Not-Extreme Uncertainty)")
-    plt.title("Class-wise Aleatoric Uncertainty (std) Spread (Outliers Removed)")
-    plt.tight_layout()
-    plt.savefig("uncertainty_spillover.png")
-    plt.close()
+    # plt.tight_layout()
+    # plt.savefig("uncertainty_vs_accuracy.png")
+    # plt.close()
 
 
-    # list = [i for i in range(20)]
+    # # Step 1: Compute predicted class, uncertainty, and true label
+    # preds = []
+    # trues = []
+    # uncertainties = []
 
-    # ambiguous_list = find_and_plot_ambiguous_images(images, m_preds, v_preds)
+    # original_labels = np.array([int(label) for label in test_loader.dataset.targets])
 
-    # ambiguous_list = list + ambiguous_list
+    # for i in range(N):
+    #     pred_class = np.argmax(m_preds[i])
+    #     unc = v_preds_aleatoric[i][pred_class]
+    #     preds.append(pred_class)
+    #     true_label = int(original_labels[i])  # use a safe source of ground-truth labels
+    #     trues.append(true_label)
+    #     uncertainties.append(unc)
+
+    # # Step 2: Filter high uncertainty predictions
+    # uncertainties = np.array(uncertainties)
+    # threshold = np.percentile(uncertainties, 80)
+
+    # filtered_preds = []
+    # filtered_trues = []
+
+    # for i in range(N):
+    #     if uncertainties[i] > threshold:
+    #         filtered_preds.append(preds[i])
+    #         filtered_trues.append(trues[i])
+
+    # # Step 3: Confusion matrix
+    # cm = confusion_matrix(filtered_trues, filtered_preds, labels=range(10))
+
+    # # Step 4: Plot
+    # plt.figure(figsize=(8, 6))
+    # sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=CIFAR10_LABELS, yticklabels=CIFAR10_LABELS)
+    # plt.xlabel('Predicted')
+    # plt.ylabel('True')
+    # plt.title('Confusion Matrix (Top 20% Aleatoric Uncertainty)')
+    # plt.tight_layout()
+    # plt.savefig("class_uncertainty_correlation.png")
+    # plt.close()
+
+    # # Step 1: Compute predicted class + its uncertainty
+    # predicted_classes = []
+    # predicted_uncertainties = []
+
+    # for i in range(N):
+    #     pred = np.argmax(m_preds[i])
+    #     unc = v_preds_aleatoric[i][pred]
+    #     predicted_classes.append(pred)
+    #     predicted_uncertainties.append(unc)
+
+    # # Step 2: Define the range of "high but not extreme" uncertainty
+    # lower_thresh = np.percentile(predicted_uncertainties, 90)
+    # upper_thresh = np.percentile(predicted_uncertainties, 99)
+
+    # # Step 3: Collect uncertainty vectors for high-but-not-extreme samples
+    # class_unc_spillover = {c: [] for c in range(10)}  # c = predicted class
+
+    # for i in range(N):
+    #     pred = predicted_classes[i]
+    #     unc = predicted_uncertainties[i]
+
+    #     if lower_thresh < unc < upper_thresh:
+    #         class_unc_spillover[pred].append(np.sqrt(v_preds_aleatoric[i]))
+
+    # # Step 4: Compute mean uncertainty vector per class
+    # spillover_matrix = np.zeros((10, 10))
+
+    # for c in range(10):
+    #     vecs = class_unc_spillover[c]
+    #     if vecs:
+    #         spillover_matrix[c] = np.mean(np.stack(vecs), axis=0)
+
+
+    # plt.figure(figsize=(8, 6))
+    # sns.heatmap(spillover_matrix, annot=True, fmt=".2f", cmap="YlGnBu",
+    #             xticklabels=CIFAR10_LABELS, yticklabels=CIFAR10_LABELS)
+    # plt.xlabel("Uncertainty On Class")
+    # plt.ylabel("Predicted Class (High-but-Not-Extreme Uncertainty)")
+    # plt.title("Class-wise Aleatoric Uncertainty (std) Spread (Outliers Removed)")
+    # plt.tight_layout()
+    # plt.savefig("uncertainty_spillover.png")
+    # plt.close()
+
+
+    list = [i for i in range(20)]
+
+    ambiguous_list = find_and_plot_ambiguous_images(images, m_preds, v_preds)
+
+    ambiguous_list = list + ambiguous_list
 
     # if len(ambiguous_list) > 20:
     #     ambiguous_list = ambiguous_list[:20]
 
-    # for i in range(len(ambiguous_list)):
-    #     plot_class_uncertainty(ambiguous_list[i], images, m_preds, v_preds, v_preds_epistemic, v_preds_aleatoric)
+    for i in range(len(ambiguous_list)):
+        plot_class_uncertainty(ambiguous_list[i], images, m_preds, v_preds, v_preds_epistemic, v_preds_aleatoric)
 
 
 

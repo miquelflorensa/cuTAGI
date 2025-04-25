@@ -70,46 +70,83 @@ DATA_FOLDER = "./data/mnist"
 import matplotlib.pyplot as plt
 import numpy as np
 
-def plot_class_uncertainty(image_idx, images, m_preds, v_preds, delta=0.2):
+def plot_class_uncertainty(image_idx,
+                           images,
+                           m_preds,
+                           v_preds,
+                           m_pred_logits,
+                           v_pred_logits,
+                           delta=0.2):
     """
-    Plots class probabilities with uncertainty bars similar to your reference example.
+    Plots:
+      1) the MNIST image,
+      2) the logit‐space predictions ± uncertainty,
+      3) the softmax‐space class probabilities ± uncertainty.
     """
+    # Data for this index
     img = images[image_idx].reshape(28, 28)
-    means = m_preds[image_idx]
-    stds = np.sqrt(v_preds[image_idx])  # Convert variance to std deviation
-    classes = np.arange(10)
+    prob_means   = m_preds[image_idx]
+    prob_stds    = np.sqrt(v_preds[image_idx])
+    logit_means  = m_pred_logits[image_idx]
+    logit_stds   = np.sqrt(v_pred_logits[image_idx])
+    classes = np.arange(len(prob_means))
 
-    fig, (ax_img, ax_probs) = plt.subplots(1, 2, figsize=(14, 6))
+    # Create three subplots: image, logits, probs
+    fig, (ax_img, ax_logits, ax_probs) = plt.subplots(1, 3, figsize=(21, 6))
 
-    # Image plot
+    # --- 1) Image ---
     ax_img.imshow(img, cmap='gray')
-    ax_img.set_title(f'Img {image_idx}, Predicted: {np.argmax(means)}, Sum of Probabilities: {np.sum(means):.2f}')
+    ax_img.set_title(
+        f'Img {image_idx}\n'
+        f'Pred (softmax): {np.argmax(prob_means)}  '
+        f'Sum p = {prob_means.sum():.2f}'
+    )
     ax_img.axis('off')
 
-    # Probability plot
+    # --- 2) Logit‐space predictions ---
     for i in classes:
-        # Uncertainty bars (μ ± σ)
-        ax_probs.plot([i, i], [means[i] - stds[i], means[i] + stds[i]],
-                     'b', linewidth=2, label='μ ± σ' if i == 0 else "")
-        ax_probs.plot([i - delta, i + delta], [means[i] + stds[i], means[i] + stds[i]],
-                     'b', linewidth=2)
-        ax_probs.plot([i - delta, i + delta], [means[i] - stds[i], means[i] - stds[i]],
-                     'b', linewidth=2)
+        # uncertainty bars
+        ax_logits.plot([i, i],
+                       [logit_means[i] - logit_stds[i], logit_means[i] + logit_stds[i]],
+                       'g', lw=2, label='μ ± σ (logits)' if i==0 else "")
+        ax_logits.plot([i-delta, i+delta],
+                       [logit_means[i] + logit_stds[i]]*2, 'g', lw=2)
+        ax_logits.plot([i-delta, i+delta],
+                       [logit_means[i] - logit_stds[i]]*2, 'g', lw=2)
+        # mean marker
+        ax_logits.scatter(i, logit_means[i], marker='o', s=50,
+                          color='k', label='Logit mean' if i==0 else "")
 
-        # Scatter points for probabilities
-        ax_probs.scatter(i, means[i], color='r', marker='p', s=60,
-                        label='Probability' if i == 0 else "")
+    ax_logits.set_xticks(classes)
+    ax_logits.set_xlabel('Class #')
+    ax_logits.set_ylabel('Logit value')
+    ax_logits.set_title('Logit‐space')
+    ax_logits.grid(True, linestyle='--', alpha=0.6)
+    ax_logits.legend(loc='upper right')
+
+    # --- 3) Softmax‐space probabilities ---
+    for i in classes:
+        ax_probs.plot([i, i],
+                      [prob_means[i] - prob_stds[i], prob_means[i] + prob_stds[i]],
+                      'b', lw=2, label='μ ± σ' if i==0 else "")
+        ax_probs.plot([i-delta, i+delta],
+                      [prob_means[i] + prob_stds[i]]*2, 'b', lw=2)
+        ax_probs.plot([i-delta, i+delta],
+                      [prob_means[i] - prob_stds[i]]*2, 'b', lw=2)
+        ax_probs.scatter(i, prob_means[i], marker='p', s=60,
+                         color='r', label='Probability' if i==0 else "")
 
     ax_probs.set_xticks(classes)
     ax_probs.set_xlabel('Class #')
     ax_probs.set_ylabel('Probability')
     ax_probs.set_ylim(-0.1, 1.1)
+    ax_probs.set_title('Softmax‐space')
     ax_probs.grid(True, linestyle='--', alpha=0.6)
     ax_probs.legend(loc='upper right')
 
     plt.tight_layout()
-    plt.savefig('./images/mnist_image_probs_variances_{}.png'.format(image_idx))
-
+    plt.savefig(f'./images_mnist_LL/mnist_image_logits_probs_{image_idx}.png')
+    plt.show()
 
 def find_and_plot_ambiguous_images(images, m_preds, v_preds, threshold=0.1, min_classes=2, max_images_to_plot=5):
     """
@@ -323,32 +360,37 @@ def tagi_trainer(
     images = {}
     m_preds = {}
     v_preds = {}
+    m_pred_logits = {}
+    v_pred_logits = {}
 
     count = 0
 
     for x, labels in test_loader:
         m_pred, v_pred = net(x)
 
-        # m_pred, v_pred = net.get_outputs()
-        v_pred = v_pred[::2] + m_pred[1::2]
+        out_updater.update_remax(
+            output_states=net.output_z_buffer,
+            mu_obs=np.full((len(labels) * nb_classes), 0.0, dtype=np.float32),
+            var_obs=np.full((len(labels) * nb_classes), 0.0, dtype=np.float32),
+            delta_states=net.input_delta_z_buffer,
+        )
+
+        m_logits = m_pred[::2]
+        v_logits = v_pred[::2] + m_pred[1::2]
+
+        m_pred, v_pred = net.get_outputs()
+        # v_pred = v_pred[::2] + m_pred[1::2]
         m_pred = m_pred[::2]
+        v_pred = v_pred[::2]
 
-        if (count == 3807):
-            print("m_pred_z: ", m_pred)
-            print("v_pred_z: ", v_pred)
-
-        # Use proabilistic softmax to convert m_pred logits to probabilities
-        m_pred, v_pred = probs_from_logits(m_pred, v_pred, nb_classes)
-
-        if (count == 3807):
-            print("m_pred_a: ", m_pred)
-            print("v_pred_a: ", v_pred)
 
         # Save each prediction with each image, m_pred is falened array of (nb_classes * batch_size, )
         for i in range(len(labels)):
             images[count] = x[i * 784 : (i + 1) * 784]
             m_preds[count] = m_pred[i * 10 : (i + 1) * 10]
             v_preds[count] = v_pred[i * 10 : (i + 1) * 10]
+            m_pred_logits[count] = m_logits[i * 10 : (i + 1) * 10]
+            v_pred_logits[count] = v_logits[i * 10 : (i + 1) * 10]
             count += 1
 
 
@@ -373,11 +415,12 @@ def tagi_trainer(
     print(f"Sum of m_pred: {np.sum(m_pred)}")
 
     ambiguous_list = find_and_plot_ambiguous_images(images, m_preds, v_preds)
+    ambiguous_list = ambiguous_list[:100]
 
     # ambiguous_list = range(0, 5)
 
     for i in range(len(ambiguous_list)):
-        plot_class_uncertainty(ambiguous_list[i], images, m_preds, v_preds)
+        plot_class_uncertainty(ambiguous_list[i], images, m_preds, v_preds, m_pred_logits, v_pred_logits)
 
 
 
