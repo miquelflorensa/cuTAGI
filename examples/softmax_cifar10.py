@@ -123,7 +123,7 @@ def load_datasets(batch_size: int):
     return train_loader, test_loader
 
 
-def main(num_epochs: int = 10, batch_size: int = 128, sigma_v: float = 0.2):
+def main(num_epochs: int = 50, batch_size: int = 128, sigma_v: float = 0.1):
     """
     Run classification training on the CIFAR10 dataset using PyTAGI.
     """
@@ -160,6 +160,16 @@ def main(num_epochs: int = 10, batch_size: int = 128, sigma_v: float = 0.2):
                 var_obs=var_y,
                 delta_states=net.input_delta_z_buffer,
             )
+
+            print("mZ:", m_pred)
+            print("s2Z:", v_pred)
+
+            m_pred, v_pred = net.get_outputs()
+
+            print("mA:", m_pred)
+            print("s2A:", v_pred)
+            print("sumA:", np.sum(m_pred, axis=1))  
+
 
             # Update parameters
             net.backward()
