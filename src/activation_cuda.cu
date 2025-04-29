@@ -1,6 +1,9 @@
 #include "../include/activation.h"
 #include "../include/activation_cuda.cuh"
 
+#include <cuda_runtime.h>
+#include <math_constants.h>  // For CUDART_PI_F
+
 ////////////////////////////////////////////////////////////////////////////////
 // Softmax Kernel
 ////////////////////////////////////////////////////////////////////////////////
@@ -623,6 +626,8 @@ void SoftmaxCuda::forward(BaseHiddenStates &input_states,
         (input_states.block_size + this->num_cuda_threads - 1) /
         this->num_cuda_threads;
 
+    printf("SoftmaxCuda::forward: blocks %d\n", blocks);
+
     softmax_mean_var_cuda<<<blocks, this->num_cuda_threads>>>(
         cu_input_states->d_mu_a, cu_input_states->d_var_a,
         cu_input_states->actual_size, cu_input_states->block_size,
@@ -1007,35 +1012,104 @@ __global__ void softmax_mean_var_cuda(float const *mu_z, float *var_z,
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= batch_size) return;
+    constexpr float SQRT_2PI = 2.5066282746310002f;
 
-    float max_mu = mu_z[0];
-    float max_var = var_z[0];
+    // Create a temporary variable to store vector of muM, varM, and cov_ZM
+    float muM[10];
+    float varM[10];
+    float cov_ZM[10];
+    float cov_M_M_sum[10];
 
-    for (int j = 1; j < output_size; j++) {
-        if (mu_z[j + i * output_size] > max_mu) {
-            max_mu = mu_z[j + i * output_size];
-            max_var = var_z[j + i * output_size];
-        }
-    }
-
-    float sum_mu = 0.0f;
     for (int j = 0; j < output_size; j++) {
-        sum_mu += expf(mu_z[j + i * output_size] - max_mu);
+        // mReLU
+        float muZ = mu_z[j + i * output_size];
+        float varZ = var_z[j + i * output_size];
+        float stdZ = sqrtf(varZ);
+        float alpha = muZ / stdZ;
+        float cdfn = fmaxf(1e-20, normcdf_cuda(alpha));
+        float pdfn = fmaxf(1e-20, (1.0f / SQRT_2PI) * expf(-0.5f * alpha * alpha));
+        muM[j] = fmaxf(1e-20, stdZ * pdfn + muZ * cdfn);
+        varM[j] = fmaxf(1e-6, -muM[j] * muM[j] + 2 * muM[j] * muZ - muZ * stdZ * pdfn +
+                    (varZ - muZ * muZ) * cdfn);
+        cov_ZM[j] = cdfn * varZ;
+        cov_M_M_sum[j] = varM[j];
     }
 
-    float tmp_mu;
+    // \tilde{M} = sum(M_i)
+    float muM_sum = 0.0f;
+    float varM_sum = 0.0f;
     for (int j = 0; j < output_size; j++) {
-        tmp_mu = expf(mu_z[j + output_size * i] - max_mu) / sum_mu;
-
-        mu_a[j + i * output_size] = tmp_mu;
-
-        jcb[j + output_size * i] = tmp_mu * (1 - tmp_mu);
-
-        var_a[j + output_size * i] = jcb[j + output_size * i] *
-                                     (var_z[j + output_size * i] + max_var) *
-                                     jcb[j + output_size * i];
+        muM_sum += muM[j];
+        varM_sum += varM[j];
     }
+
+    // lnM = log(M_i)
+    float mulnM[10];
+    float varlnM[10];
+    float cov_M_lnM[10];
+    float cov_lnM_lnM_sum[10];
+    for (int j = 0; j < output_size; j++) {
+        varlnM[j] = logf(1.0f + fminf(10.0f, varM[j] / (muM[j] * muM[j])));
+        mulnM[j] = logf(muM[j]) - 0.5f * varlnM[j];
+        cov_M_lnM[j] = varlnM[j] * muM[j];
+        cov_lnM_lnM_sum[j] = logf(1.0f + cov_M_M_sum[j] / muM[j] / muM_sum);
+    }
+
+    // ln\tilde{M} log(\tilde{M}_i)
+    float varlnM_sum = logf(1.0f + fminf(10.0f, varM_sum / (muM_sum * muM_sum)));
+    float mulnM_sum = logf(muM_sum) - 0.5f * varlnM_sum;
+
+    // 1/\tilde{M} -> 1-ln\tilde{M}
+    float varlnM_sum_inv = 1.0f / varlnM_sum;
+    float mulnM_sum_inv = 1.0f - mulnM_sum;
+
+    float muM_sum_inv = expf(mulnM_sum_inv + 0.5f * varlnM_sum_inv);
+    float varM_sum_inv = muM_sum_inv * muM_sum_inv * (expf(varlnM_sum_inv) - 1.0f);
+
+    float cov_M_M_sum_inv[10];
+    for (int j = 0; j < output_size; j++) {
+        cov_M_M_sum_inv[j] = (expf(cov_lnM_lnM_sum[j]) - 1.0f) *
+                             muM_sum * muM_sum_inv;
+    }
+
+    // \check{A}_i = lnM_i - ln\tilde{M}
+    float mulnA[10];
+    float varlnA[10];
+    for (int j = 0; j < output_size; j++) {
+        mulnA[j] = mulnM[j] - mulnM_sum;
+        varlnA[j] = varlnM[j] + varlnM_sum -
+                    2 * cov_lnM_lnM_sum[j];
+    }
+
+    // A_i = normal
+    float muA[10];
+    float varA[10];
+    float cov_ZA[10];
+    float cov_cAlnM[10];
+    float cov_AM[10];
+    for (int j = 0; j < output_size; j++) {
+        muA[j] = expf(mulnA[j] + 0.5f * varlnA[j]);
+        cov_cAlnM[j] = varlnM[j] - cov_lnM_lnM_sum[j];    
+    }
+    float muA_sum = 0.0f;
+    for (int j = 0; j < output_size; j++) {
+        muA_sum += muA[j];
+    }
+    for (int j = 0; j < output_size; j++) {
+        muA[j] = muA[j] / muA_sum;
+        varA[j] = muA[j] * muA[j] * (expf(varlnA[j]) - 1.0f);
+        cov_AM[j] = (expf(cov_cAlnM[j]) - 1.0f) * muA[j] * muM[j];
+        
+        // cov_ZA[j] = fminf(cov_AM[j] / cov_ZM[j] * var_z[j], sqrtf(varA[j]) * sqrtf(var_z[j]));
+        cov_ZA[j] = fminf(cov_AM[j] / cov_ZM[j] * var_z[j], sqrtf(varA[j]) * sqrtf(var_z[j]));
+
+        mu_a[j + i * output_size] = muA[j];
+        var_a[j + i * output_size] = varA[j];
+        jcb[j + i * output_size] = cov_ZA[j] / var_z[j];
+    }
+
 }
+
 
 __global__ void even_exp_mean_var_cuda(float const *mu_z, float const *var_z,
                                        float const *jcb_z, int num_states,
@@ -1054,7 +1128,7 @@ __global__ void even_exp_mean_var_cuda(float const *mu_z, float const *var_z,
             mu_a[col] = expf(mu_z[col] + 0.5f * var_z[col]);
             var_a[col] =
                 expf(2.0f * mu_z[col] + var_z[col]) * (expf(var_z[col]) - 1.0f);
-            jcb_a[col] = var_z[col] * mu_a[col];
+            jcb_a[col] = mu_a[col];
         }
     }
 }
