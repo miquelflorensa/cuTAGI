@@ -1,5 +1,7 @@
 #include "../include/custom_logger.h"
 #include "../include/output_updater_cuda.cuh"
+#include "../include/activation_cuda.cuh"
+
 __global__ void update_delta_z_using_indices_cuda(
     float const *mu_a, float const *var_a, float const *jcb, float const *obs,
     float const *var_obs, int const *selected_idx, int n_obs, int n_enc,
@@ -32,6 +34,10 @@ __global__ void update_delta_z_cuda(float const *mu_a, float const *var_a,
     float zero_pad = 0;
     float tmp = 0;
     if (col < size) {
+
+        float delta_mu_zv = 0;
+        float delta_var_zv = 0;
+
         tmp = jcb[col] / (var_a[col] + var_obs[col]);
         if (isinf(tmp) || isnan(tmp)) {
             delta_mu[col] = zero_pad;
@@ -40,6 +46,37 @@ __global__ void update_delta_z_cuda(float const *mu_a, float const *var_a,
             delta_mu[col] = tmp * (obs[col] - mu_a[col]);
             delta_var[col] = -tmp * jcb[col];
         }
+    }
+}
+
+__global__ void update_delta_z_cuda_2(float const *mu_a, float const *var_a,
+    float const *jcb, float const *obs,
+    float const *var_obs, int size,
+    float *delta_mu, float *delta_var, float *var_zv) {
+
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+    float zero_pad = 0;
+    float tmp = 0;
+
+    if (col < size) {
+
+        float delta_mu_zv = 0;
+        float delta_var_zv = 0;
+
+        tmp = jcb[col] / (var_a[col] + var_obs[col]);
+        if (isinf(tmp) || isnan(tmp)) {
+            delta_mu_zv = zero_pad;
+            delta_var_zv = zero_pad;
+        } else {
+            delta_mu_zv = tmp * (obs[col] - mu_a[col]);
+            delta_var_zv = -tmp * jcb[col];
+        }
+
+        // Compute deltas for Z
+        float Jz = 1.0f / (var_zv[col]);
+        // TODO: Use Jz_mu for both
+        delta_mu[col] = Jz * delta_mu_zv;
+        delta_var[col] = Jz * Jz * delta_var_zv;
     }
 }
 
@@ -134,6 +171,13 @@ void OutputUpdaterCuda::set_num_cuda_threads(unsigned int num_threads) {
     this->num_cuda_threads = num_threads;
 }
 
+__global__ void add_var_obs_to_var_a(float *d_mu_a, float *d_var_a, float *d_jcb,
+    const float *d_var_obs) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    d_var_a[idx] += d_var_obs[idx];
+    }
+
 void OutputUpdaterCuda::update_output_delta_z(BaseHiddenStates &output_states,
                                               BaseObservation &obs,
                                               BaseDeltaStates &delta_states)
@@ -157,14 +201,44 @@ void OutputUpdaterCuda::update_output_delta_z(BaseHiddenStates &output_states,
     cu_delta_states->reset_zeros();
 
     // Kernel
-    int THREADS_PER_BLOCK = 256;
     int num_states = cu_obs->size;
-    int blocks = (num_states + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
+    int blocks =
+        (num_states + this->num_cuda_threads - 1) / this->num_cuda_threads;
+
+    add_var_obs_to_var_a<<<blocks, this->num_cuda_threads>>>(
+        cu_output_states->d_mu_a, cu_output_states->d_var_a,
+        cu_output_states->d_jcb ,cu_obs->d_var_obs);
+    cudaDeviceSynchronize();
+
+    float *var_zv;
+    cudaMalloc(&var_zv, sizeof(float) * num_states);
+    cudaMemcpy(var_zv, cu_output_states->d_var_a, sizeof(float) * num_states,
+               cudaMemcpyDeviceToDevice);
+
+    blocks = 8;
+
+    // Softmax
+    softmax_mean_var_cuda<<<blocks, this->num_cuda_threads>>>(
+        cu_output_states->d_mu_a, cu_output_states->d_var_a,
+        cu_output_states->actual_size, cu_output_states->block_size,
+        cu_output_states->d_mu_a, cu_output_states->d_jcb,
+        cu_output_states->d_var_a);
+    cudaDeviceSynchronize();
+
+    blocks =
+    (num_states + this->num_cuda_threads - 1) / this->num_cuda_threads;
 
     update_delta_z_cuda<<<blocks, this->num_cuda_threads>>>(
         cu_output_states->d_mu_a, cu_output_states->d_var_a,
         cu_output_states->d_jcb, cu_obs->d_mu_obs, cu_obs->d_var_obs,
         num_states, cu_delta_states->d_delta_mu, cu_delta_states->d_delta_var);
+
+    // update_delta_z_cuda_2<<<blocks, this->num_cuda_threads>>>(
+    //     cu_output_states->d_mu_a, cu_output_states->d_var_a,
+    //     cu_output_states->d_jcb, cu_obs->d_mu_obs, cu_obs->d_var_obs,
+    //     num_states, cu_delta_states->d_delta_mu, cu_delta_states->d_delta_var, var_zv);
+
+    cudaFree(var_zv);
 }
 
 void OutputUpdaterCuda::update_selected_output_delta_z(
