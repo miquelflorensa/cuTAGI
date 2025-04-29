@@ -88,7 +88,7 @@ CNN_BATCHNORM = Sequential(
     Linear(32 * 4 * 4, 100),
     ReLU(),
     Linear(100, 10),
-    Softmax(),
+    # Softmax(),
 )
 
 
@@ -98,7 +98,7 @@ def one_hot_encode(labels, num_classes=10):
     return F.one_hot(labels, num_classes=num_classes).numpy().flatten()
 
 
-def main(num_epochs: int = 10, batch_size: int = 128, sigma_v: float = 0.1):
+def main(num_epochs: int = 10, batch_size: int = 128, sigma_v: float = 0.01):
     """
     Run classification training on the MNIST dataset using PyTAGI.
     """
@@ -123,7 +123,7 @@ def main(num_epochs: int = 10, batch_size: int = 128, sigma_v: float = 0.1):
     )
 
     # Initialize network
-    net = CNN
+    net = CNN_BATCHNORM
     net.to_device("cuda" if pytagi.cuda.is_available() else "cpu")
 
     out_updater = OutputUpdater(net.device)
@@ -152,6 +152,15 @@ def main(num_epochs: int = 10, batch_size: int = 128, sigma_v: float = 0.1):
                 var_obs=var_y,
                 delta_states=net.input_delta_z_buffer,
             )
+
+            # print("mZ:", m_pred)
+            # print("s2Z:", v_pred)
+
+            m_pred, v_pred = net.get_outputs()
+
+            # print("mA:", m_pred)
+            # print("s2A:", v_pred)
+            # print("sumA:", np.sum(m_pred))  
 
             # Update parameters
             net.backward()
