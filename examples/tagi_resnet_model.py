@@ -11,6 +11,7 @@ from pytagi.nn import (
     ResNetBlock,
     Sequential,
     Softmax,
+    EvenExp,
 )
 
 
@@ -132,8 +133,9 @@ def resnet18_cifar10(
     if num_outputs == 10:
         final_layers = [
             AvgPool2d(4),
-            Linear(512, num_outputs, gain_weight=gain_w, gain_bias=gain_b),
-            Softmax(),
+            Linear(512, num_outputs * 2, gain_weight=gain_w, gain_bias=gain_b),
+            EvenExp(),
+            # Softmax(),
         ]
     else:
         final_layers = [
