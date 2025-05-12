@@ -29,6 +29,7 @@ from pytagi.nn import (
     ReLU,
     Sequential,
     Softmax,
+    EvenExp,
 )
 
 # Constants for dataset normalization
@@ -38,27 +39,28 @@ NORMALIZATION_STD = [0.2470, 0.2435, 0.2616]
 # Define the CNN architecture
 CNN = Sequential(
     # 32x32
-    Conv2d(3, 32, 5, bias=False, padding=2, in_width=32, in_height=32),
+    Conv2d(3, 32, 5, bias=False, padding=2, in_width=32, in_height=32, gain_weight=1.0, gain_bias=1.0),
     ReLU(),
     BatchNorm2d(32),
     MaxPool2d(2, 2),
     # 16x16
-    Conv2d(32, 32, 5, bias=False, padding=2),
+    Conv2d(32, 32, 5, bias=False, padding=2, gain_weight=1.0, gain_bias=1.0),
     ReLU(),
     BatchNorm2d(32),
     MaxPool2d(2, 2),
     # 8x8
-    Conv2d(32, 64, 5, bias=False, padding=2),
+    Conv2d(32, 64, 5, bias=False, padding=2, gain_weight=1.0, gain_bias=1.0),
     ReLU(),
     BatchNorm2d(64),
     MaxPool2d(2, 2),
     # 4x4
-    Linear(64 * 4 * 4, 256),
+    Linear(64 * 4 * 4, 256, gain_weight=1.0, gain_bias=1.0),
     ReLU(),
-    Linear(256, 128),
+    Linear(256, 128, gain_weight=1.0, gain_bias=1.0),
     ReLU(),
-    Linear(128, 10),
-    Softmax(),
+    Linear(128, 20, gain_weight=1.0, gain_bias=1.0),
+    # Softmax(),
+    EvenExp(),
 )
 
 
@@ -132,13 +134,17 @@ def main(num_epochs: int = 50, batch_size: int = 128, sigma_v: float = 0.1):
     train_loader, test_loader = load_datasets(batch_size)
 
     # Initialize network
-    net = resnet18_cifar10(num_outputs=10, gain_w=0.1, gain_b=0.1)
+    net = resnet18_cifar10(num_outputs=10, gain_w=0.083, gain_b=0.083)
     # net = CNN
     net.to_device("cuda" if pytagi.cuda.is_available() else "cpu")
     out_updater = OutputUpdater(net.device)
 
     # Training loop
     var_y = np.full((batch_size * 10,), sigma_v**2, dtype=np.float32)
+
+    eps = 4e-2
+
+    best_test_error = 1e10
 
     for epoch in range(num_epochs):
         net.train()
@@ -150,26 +156,27 @@ def main(num_epochs: int = 50, batch_size: int = 128, sigma_v: float = 0.1):
             # Prepare data
             x = data.numpy().flatten()  # Flatten the images
             y = one_hot_encode(target)  # Convert to one-hot encoding
+            # replace y=1 with 0.99 and y=0 with 0.01/9
+            y = np.where(y == 1, 1.0 - eps, y)
+            y = np.where(y == 0, eps / 9.0, y)
+            y = y.flatten()
 
             m_pred, v_pred = net(x)
 
             # Update output layers
-            out_updater.update(
+            out_updater.update_heteros(
                 output_states=net.output_z_buffer,
                 mu_obs=y,
-                var_obs=var_y,
                 delta_states=net.input_delta_z_buffer,
             )
 
             print("mZ:", m_pred)
-            print("s2Z:", v_pred)
-
+            print("vZ:", v_pred)
             m_pred, v_pred = net.get_outputs()
-
+            m_pred = m_pred[::2]
+            v_pred = v_pred[::2]
             print("mA:", m_pred)
-            print("s2A:", v_pred)
-            print("sumA:", np.sum(m_pred, axis=1))  
-
+            print("vA:", v_pred)
 
             # Update parameters
             net.backward()
@@ -194,6 +201,17 @@ def main(num_epochs: int = 50, batch_size: int = 128, sigma_v: float = 0.1):
             x = data.numpy().flatten()
             m_pred, v_pred = net(x)
 
+            # Update output layers
+            out_updater.update_heteros(
+                output_states=net.output_z_buffer,
+                mu_obs=np.full((len(target) * 10), 0.0, dtype=np.float32),
+                delta_states=net.input_delta_z_buffer,
+            )
+
+            m_pred, v_pred = net.get_outputs()
+            m_pred = m_pred[::2]
+            v_pred = v_pred[::2]
+
             # Calculate test error
             pred = np.reshape(m_pred, (batch_size, 10))
             label = np.argmax(pred, axis=1)
@@ -206,6 +224,12 @@ def main(num_epochs: int = 50, batch_size: int = 128, sigma_v: float = 0.1):
             f"Train Error: {train_error/num_train_samples * 100:.2f}% | "
             f"Test Error: {test_error_rate:.2f}%"
         )
+        # Save the model if the test error is lower than the best test error
+        if test_error_rate < best_test_error:
+            best_test_error = test_error_rate
+            net.save(
+                f"models_bin/best_model_epoch_{epoch+1}_error_{test_error_rate:.2f}.bin"
+            )
 
 
 if __name__ == "__main__":
