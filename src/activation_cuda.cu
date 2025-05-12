@@ -1,9 +1,6 @@
 #include "../include/activation.h"
 #include "../include/activation_cuda.cuh"
 
-#include <cuda_runtime.h>
-#include <math_constants.h>  // For CUDART_PI_F
-
 ////////////////////////////////////////////////////////////////////////////////
 // Softmax Kernel
 ////////////////////////////////////////////////////////////////////////////////
@@ -626,8 +623,6 @@ void SoftmaxCuda::forward(BaseHiddenStates &input_states,
         (input_states.block_size + this->num_cuda_threads - 1) /
         this->num_cuda_threads;
 
-    printf("SoftmaxCuda::forward: blocks %d\n", blocks);
-
     softmax_mean_var_cuda<<<blocks, this->num_cuda_threads>>>(
         cu_input_states->d_mu_a, cu_input_states->d_var_a,
         cu_input_states->actual_size, cu_input_states->block_size,
@@ -649,6 +644,78 @@ std::unique_ptr<BaseLayer> SoftmaxCuda::to_host()
  */
 {
     std::unique_ptr<BaseLayer> host_layer = std::make_unique<Softmax>();
+    host_layer->input_size = this->input_size;
+    host_layer->output_size = this->output_size;
+
+    return host_layer;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Remax
+////////////////////////////////////////////////////////////////////////////////
+RemaxCuda::RemaxCuda() {}
+RemaxCuda::~RemaxCuda() {}
+
+std::string RemaxCuda::get_layer_info() const
+/*
+ */
+{
+    return "Remax()";
+}
+
+std::string RemaxCuda::get_layer_name() const
+/*
+ */
+{
+    return "RemaxCuda";
+}
+
+LayerType RemaxCuda::get_layer_type() const
+/*
+ */
+{
+    return LayerType::Activation;
+}
+
+void RemaxCuda::forward(BaseHiddenStates &input_states,
+                          BaseHiddenStates &output_states,
+                          BaseTempStates &temp_states)
+/*
+ */
+{
+    // New poitner will point to the same memory location when casting
+    HiddenStateCuda *cu_input_states =
+        dynamic_cast<HiddenStateCuda *>(&input_states);
+    HiddenStateCuda *cu_output_states =
+        dynamic_cast<HiddenStateCuda *>(&output_states);
+    // TempStateCuda *cu_temp_states = dynamic_cast<TempStateCuda
+    // *>(&temp_states);
+
+    unsigned int blocks =
+        (input_states.block_size + this->num_cuda_threads - 1) /
+        this->num_cuda_threads;
+
+    remax_mean_var_cuda<<<blocks, this->num_cuda_threads>>>(
+        cu_input_states->d_mu_a, cu_input_states->d_var_a,
+        cu_input_states->actual_size, cu_input_states->block_size,
+        cu_output_states->d_mu_a, cu_output_states->d_jcb,
+        cu_output_states->d_var_a);
+
+    if (this->input_size != input_states.actual_size) {
+        this->input_size = input_states.actual_size;
+        this->output_size = input_states.actual_size;
+    }
+
+    // Update number of actual states.
+    cu_output_states->block_size = cu_input_states->block_size;
+    cu_output_states->actual_size = cu_input_states->actual_size;
+}
+
+std::unique_ptr<BaseLayer> RemaxCuda::to_host()
+/* Transfer to cpu version
+ */
+{
+    std::unique_ptr<BaseLayer> host_layer = std::make_unique<Remax>();
     host_layer->input_size = this->input_size;
     host_layer->output_size = this->output_size;
 
@@ -1001,6 +1068,44 @@ __global__ void leakyrelu_mean_var_cuda(float const *mu_z, float const *var_z,
             jcb[col] = one_pad;
             var_a[col] = var_z[col];
         }
+    }
+}
+
+__global__ void softmax_mean_var_cuda(float const *mu_z, float *var_z,
+    size_t output_size, int batch_size,
+    float *mu_a, float *jcb, float *var_a)
+/*
+*/
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= batch_size) return;
+
+    float max_mu = mu_z[0];
+    float max_var = var_z[0];
+
+    for (int j = 1; j < output_size; j++) {
+        if (mu_z[j + i * output_size] > max_mu) {
+            max_mu = mu_z[j + i * output_size];
+            max_var = var_z[j + i * output_size];
+        }
+    }
+
+    float sum_mu = 0.0f;
+    for (int j = 0; j < output_size; j++) {
+        sum_mu += expf(mu_z[j + i * output_size] - max_mu);
+    }
+
+    float tmp_mu;
+    for (int j = 0; j < output_size; j++) {
+        tmp_mu = expf(mu_z[j + output_size * i] - max_mu) / sum_mu;
+
+        mu_a[j + i * output_size] = tmp_mu;
+
+        jcb[j + output_size * i] = tmp_mu * (1 - tmp_mu);
+
+        var_a[j + output_size * i] = jcb[j + output_size * i] *
+        (var_z[j + output_size * i] + max_var) *
+        jcb[j + output_size * i];
     }
 }
 
@@ -1525,7 +1630,7 @@ __global__ void leakyrelu_mean_var_cuda(float const *mu_z, float const *var_z,
 //     }
 // }
 
-__global__ void softmax_mean_var_cuda(
+__global__ void remax_mean_var_cuda(
     const float *mu_z,
     float       *var_z,
     size_t        output_size,   // expect even (e.g. 20)
@@ -1570,7 +1675,7 @@ __global__ void softmax_mean_var_cuda(
 
         muM[k]          = muMk;
         varM[k]         = varMk;
-        cov_ZM[k]       = fmax(cdfn * varZ, 0.0);
+        cov_ZM[k]       = fmax(cdfn * varZ, EPS);
         cov_M_M_sum[k]  = varMk;
     }
 
@@ -1615,7 +1720,7 @@ __global__ void softmax_mean_var_cuda(
 
     double cov_inv[10];
     for (int k = 0; k < K; ++k) {
-        double ce = fmax(exp(cov_lnM_lnM_sum[k]) - 1.0, 0.0);
+        double ce = fmax(exp(cov_lnM_lnM_sum[k]) - 1.0, EPS);
         cov_inv[k] = ce * muM_sum * muM_inv;
     }
 
@@ -1642,19 +1747,19 @@ __global__ void softmax_mean_var_cuda(
         int j   = 2*k;
         int idx = j + i*output_size;
         double norm_muA = muA[k] / muA_sum;
-        norm_muA        = fmin(fmax(norm_muA, 0.0), 1.0);
+        norm_muA        = fmin(fmax(norm_muA, EPS), 1.0);
 
-        double ve     = fmax(exp(varlnA[k]) - 1.0, 0.0);
+        double ve     = fmax(exp(varlnA[k]) - 1.0, EPS);
         double varA_l = norm_muA * norm_muA * ve;
-        varA_l        = fmin(fmax(varA_l, 0.0), norm_muA*(1.0 - norm_muA));
+        varA_l        = fmin(fmax(varA_l, EPS), norm_muA*(1.0 - norm_muA));
 
-        double ce     = fmax(exp(varlnM[k] - cov_lnM_lnM_sum[k]) - 1.0, 0.0);
+        double ce     = fmax(exp(varlnM[k] - cov_lnM_lnM_sum[k]) - 1.0, EPS);
         double covAM  = ce * norm_muA * muM[k];
         double varMk  = fmax(varM[k], EPS);
 
         double covZA  = covAM * cov_ZM[k] / varMk;
         double maxC   = sqrt(varA_l) * sqrt(fmax((double)var_z[idx], EPS));
-        covZA         = fmin(fmax(covZA, 0.0), maxC);
+        covZA         = fmin(fmax(covZA, EPS), maxC);
 
         mu_a[idx]     = (float)norm_muA;
         var_a[idx]    = (float)varA_l;
@@ -1844,73 +1949,69 @@ __global__ void even_exp_mean_var_cuda(float const *mu_z, float const *var_z,
 
 
             // Configuration constants
-            constexpr double EPS        = 1e-6;
-            constexpr double MIN_PHI    = 1e-20;
-            constexpr double MIN_PHI_ARG= 1e-20;
+            constexpr double EPS        = 1e-6;           // floor for variance
+            constexpr double MIN_TAIL   = 1e-20;          // clamp for tail probabilities
             constexpr double SQRT_2PI   = 2.5066282746310002;
             constexpr double INV_SQRT2  = 0.7071067811865475;
             constexpr double ALPHA      = 0.5;
 
-            // 1) Clip input variance, compute standardized z
-            double mz    = (double)mu_z[col];
-            double varz  = fmax((double)var_z[col], EPS);
-            double sz    = sqrt(varz);
-            double z     = mz / sz;
+            // inside your kernel, per-element:
+            double mz   = static_cast<double>(mu_z[col]);
+            double varz = static_cast<double>(var_z[col]);
 
-            // 2) Shifted points for alpha and 2*alpha
-            double z_a   = z + sz/ALPHA;
-            double z_2a  = z + 2.0*sz/ALPHA;
+            // 1) std-dev and standardize
+            double sz = sqrt(varz);
+            double z  = mz / sz;
 
-            // 3) Gaussian PDF and CDF with lower bounds
-            auto safe_pdf = [&](double x){
-            double p = (1.0/SQRT_2PI) * exp(-0.5*x*x);
-            return fmax(p, MIN_PHI);
-            };
-            auto safe_cdf = [&](double x){
-            double c = 0.5 * erfc(-x * INV_SQRT2);
-            return fmax(c, MIN_PHI);
-            };
+            // 2) shift amount
+            double a = sz / ALPHA;
+            double z_a  = z + a;
+            double z_2a = z + 2.0 * a;
 
-            double  φ_z      = safe_pdf(z);
-            double  φ_za     = safe_pdf(z_a);
-            double  φ_z2a    = safe_pdf(z_2a);
-            double  Φ_z      = safe_cdf(z);
-            double  Φ_za     = safe_cdf(z_a);
-            double  Φ_z2a    = safe_cdf(z_2a);
+            // 3) φ(z) and tail probs P[Z < −x] = 0.5*erfc(x/√2), clamped
+            double phi_z = exp(-0.5*z*z) / SQRT_2PI;
 
-            // 4) Compute mean in double, then clip
-            double mean_d = mz
-                + sz * φ_z
-                - 0.5*(ALPHA + mz)*(2.0 - 2.0*Φ_z)
-                + (ALPHA*φ_z * (2.0 - 2.0*Φ_za)) / (2.0*φ_za);
-            // shift by +alpha as in your original, then clip >0
-            mean_d = fmax(mean_d + ALPHA, MIN_PHI);
+            double tail_z   = fmax(0.5 * erfc( z    * INV_SQRT2), MIN_TAIL);
+            double tail_za  = fmax(0.5 * erfc( z_a  * INV_SQRT2), MIN_TAIL);
+            double tail_z2a = fmax(0.5 * erfc( z_2a * INV_SQRT2), MIN_TAIL);
 
-            // 5) Compute variance in double, ensure >= EPS
-            double var_d = mz*mz
-                + sz*φ_z * mz
+            // 4) analytic ratios instead of φ(z)/φ(z+k·a)
+            double exp_a   = exp(   a*z + 0.5 * (a*a)      );
+            double exp_2a  = exp( 2*a*z + 0.5 * (2*a)*(2*a));
+
+            // 5) Mean E[CELU(z)]
+            double mean_d = 
+                mz
+                + sz * phi_z
+                - (ALPHA + mz) * tail_z
+                +  ALPHA * tail_za * exp_a;
+
+            // 6) Second moment E[CELU(z)²]
+            double E2 = 
+                mz*mz
+                + mz*sz * phi_z
                 + varz
-                + 0.5 * (
-                    -2.0*φ_z*(2.0 - 2.0*Φ_za)*ALPHA*ALPHA/φ_za
-                    +   φ_z*(2.0 - 2.0*Φ_z2a)*ALPHA*ALPHA/φ_z2a
-                    + (ALPHA*ALPHA - mz*mz - varz)*(2.0 - 2.0*Φ_z)
-                )
-                - mean_d*mean_d;
-            var_d = fmax(var_d, EPS);
+                - 2.0 * ALPHA*ALPHA * tail_za  * exp_a
+                +       ALPHA*ALPHA * tail_z2a * exp_2a
+                +    (ALPHA*ALPHA - mz*mz - varz) * tail_z;
 
-            // 6) Compute covariance, then jacobian = cov/varz
+            // 7) Variance = E2 – mean², with floor
+            double var_d = fmax(E2 - mean_d*mean_d, EPS);
+
+            // 8) Covariance Cov[z, CELU(z)] = varz * (P[Z> -z] + tail_za·exp_a)
             double cov_d = varz * (
-                Φ_z
-                + (φ_z*(1.0 - Φ_za)) / φ_za
+                (1.0 - tail_z)
+                + tail_za * exp_a
             );
-            // jcb = cov_d / var_z, clip to [0,1] for safety
+
+            // 9) Jacobian in [0,1]
             double jcb_d = cov_d / varz;
             jcb_d = fmin(fmax(jcb_d, 0.0), 1.0);
 
-            // 7) Store results back to float
-            mu_a[col] = static_cast<float>(mean_d);
-            var_a[col]  = static_cast<float>(var_d);
-            jcb_a[col]  = static_cast<float>(jcb_d);
+            // 10) Store back (cast to float, clamp mean+α > 0)
+            mu_a[col]  = static_cast<float>( fmax(mean_d + ALPHA, 1e-20) );
+            var_a[col] = static_cast<float>( var_d );
+            jcb_a[col] = static_cast<float>( jcb_d );
         }
     }
 }
