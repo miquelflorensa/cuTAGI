@@ -459,7 +459,7 @@ void OutputUpdaterCuda::update_output_delta_z_heteros(
     blocks = 8;
 
     // Softmax
-    softmax_mean_var_cuda<<<blocks, this->num_cuda_threads>>>(
+    remax_mean_var_cuda<<<blocks, this->num_cuda_threads>>>(
         cu_output_states->d_mu_a, cu_output_states->d_var_a,
         cu_output_states->actual_size, cu_output_states->block_size,
         cu_output_states->d_mu_a, cu_output_states->d_jcb,
