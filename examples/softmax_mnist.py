@@ -30,6 +30,7 @@ from pytagi.nn import (
     ReLU,
     Sequential,
     Softmax,
+    EvenExp,
 )
 
 FNN = Sequential(
@@ -77,17 +78,18 @@ CNN = Sequential(
 )
 
 CNN_BATCHNORM = Sequential(
-    Conv2d(1, 16, 4, padding=1, in_width=28, in_height=28, bias=False),
-    ReLU(),
-    BatchNorm2d(16),
-    AvgPool2d(3, 2),
-    Conv2d(16, 32, 5, bias=False),
+    Conv2d(1, 32, 4, padding=1, in_width=28, in_height=28, bias=False, gain_weight=0.05, gain_bias=0.05),
     ReLU(),
     BatchNorm2d(32),
     AvgPool2d(3, 2),
-    Linear(32 * 4 * 4, 100),
+    Conv2d(32, 64, 5, bias=False, gain_weight=0.05, gain_bias=0.05),
     ReLU(),
-    Linear(100, 10),
+    BatchNorm2d(64),
+    AvgPool2d(3, 2),
+    Linear(64 * 4 * 4, 256, gain_weight=0.05, gain_bias=0.05),
+    ReLU(),
+    Linear(256, 20, gain_weight=0.05, gain_bias=0.05),
+    EvenExp(),
     # Softmax(),
 )
 
@@ -98,7 +100,7 @@ def one_hot_encode(labels, num_classes=10):
     return F.one_hot(labels, num_classes=num_classes).numpy().flatten()
 
 
-def main(num_epochs: int = 10, batch_size: int = 128, sigma_v: float = 0.01):
+def main(num_epochs: int = 10, batch_size: int = 128, sigma_v: float = 0.0001):
     """
     Run classification training on the MNIST dataset using PyTAGI.
     """
@@ -130,6 +132,7 @@ def main(num_epochs: int = 10, batch_size: int = 128, sigma_v: float = 0.01):
 
     # Training loop
     var_y = np.full((batch_size * 10,), sigma_v**2, dtype=np.float32)
+    eps = 4e-2
 
     for epoch in range(num_epochs):
         net.train()
@@ -141,25 +144,33 @@ def main(num_epochs: int = 10, batch_size: int = 128, sigma_v: float = 0.01):
             # Prepare data
             x = data.numpy().flatten()  # Flatten the images
             y = one_hot_encode(target).flatten()  # Convert to one-hot encoding
+            y = np.where(y == 1, 1.0 - eps, y)
+            y = np.where(y == 0, eps / 9.0, y)
+            y = y.flatten()
 
             # Feedforward and backward pass
             m_pred, v_pred = net(x)
 
             # Update output layers
-            out_updater.update(
+            out_updater.update_heteros(
                 output_states=net.output_z_buffer,
                 mu_obs=y,
-                var_obs=var_y,
                 delta_states=net.input_delta_z_buffer,
             )
 
-            # print("mZ:", m_pred)
-            # print("s2Z:", v_pred)
+            # v_pred = v_pred[::2] + m_pred[1::2]
+            # m_pred = m_pred[::2]
+            # np.set_printoptions(precision=18, suppress=False, floatmode='maxprec')
+            print("mZ:", m_pred)
+            print("s2Z:", v_pred)
+            
 
             m_pred, v_pred = net.get_outputs()
+            m_pred = m_pred[::2]
+            v_pred = v_pred[::2]
 
-            # print("mA:", m_pred)
-            # print("s2A:", v_pred)
+            print("mA:", m_pred)
+            print("s2A:", v_pred)
             # print("sumA:", np.sum(m_pred))  
 
             # Update parameters
@@ -185,6 +196,17 @@ def main(num_epochs: int = 10, batch_size: int = 128, sigma_v: float = 0.01):
         for data, target in test_loader:
             x = data.numpy().flatten()
             m_pred, v_pred = net(x)
+
+            # Update output layers
+            out_updater.update_heteros(
+                output_states=net.output_z_buffer,
+                mu_obs=y,
+                delta_states=net.input_delta_z_buffer,
+            )
+
+            m_pred, v_pred = net.get_outputs()
+            m_pred = m_pred[::2]
+            v_pred = v_pred[::2]
 
             # Calculate test error
             pred = np.reshape(m_pred, (batch_size, 10))
