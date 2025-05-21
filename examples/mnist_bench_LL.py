@@ -216,9 +216,10 @@ def tagi_trainer(
             # Feedforward and backward pass
             m_pred, v_pred = net(x)
 
-            y = np.full((len(labels) * nb_classes,), 0, dtype=np.float32)
+            epsilon = 1e-6
+            y = np.full((len(labels) * nb_classes,), epsilon, dtype=np.float32)
             for i in range(len(labels)):
-                y[i * nb_classes + labels[i]] = 1
+                y[i * nb_classes + labels[i]] = 1.0 - epsilon
 
             # Update output layers based on targets
             # y, y_idx, _ = utils.label_to_obs(labels=labels, num_classes=10)

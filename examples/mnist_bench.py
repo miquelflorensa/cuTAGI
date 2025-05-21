@@ -60,8 +60,8 @@ TAGI_CNN_BATCHNORM = Sequential(
     AvgPool2d(3, 2),
     Linear(64 * 4 * 4, 256, gain_weight=0.1, gain_bias=0.1),
     ReLU(),
-    Linear(256, 20, gain_weight=0.1, gain_bias=0.1),
-    EvenExp(),
+    Linear(256, 10, gain_weight=0.1, gain_bias=0.1),
+    # EvenExp(),
 )
 
 
@@ -158,7 +158,7 @@ def custom_collate_fn(batch):
 
 
 def tagi_trainer(
-    batch_size: int, num_epochs: int, device: str = "cpu", sigma_v: float = 0.05
+    batch_size: int, num_epochs: int, device: str = "cpu", sigma_v: float = 0.00
 ):
     # Data loading and preprocessing
     transform = transforms.Compose(
@@ -247,8 +247,8 @@ def tagi_trainer(
             print(f"mZ: {m_pred}")
             print(f"vZ: {v_pred}")
             m_pred, v_pred = net.get_outputs()
-            v_pred = v_pred[::2] + m_pred[1::2]
-            m_pred = m_pred[::2]
+            # v_pred = v_pred[::2] + m_pred[1::2]
+            # m_pred = m_pred[::2]
 
             # ma, va = net.get_outputs()
             # m_pred = np.exp(ma + 0.5 * va)
@@ -296,8 +296,8 @@ def tagi_trainer(
             # )
 
             m_pred, v_pred = net.get_outputs()
-            v_pred = v_pred[::2] + m_pred[1::2]
-            m_pred = m_pred[::2]
+            # v_pred = v_pred[::2] + m_pred[1::2]
+            # m_pred = m_pred[::2]
             # ma, va = net.get_outputs()
             # m_pred = np.exp(ma + 0.5 * va)
             # v_pred = m_pred**2 * (np.exp(va) - 1)

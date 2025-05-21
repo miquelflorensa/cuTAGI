@@ -976,21 +976,29 @@ __global__ void mixture_relu_mean_var_cuda(float const *mu_z,
 {
     int col = blockIdx.x * blockDim.x + threadIdx.x;
     constexpr float SQRT_2PI = 2.5066282746310002f;
+
+    // if (col % 2 != 0) {
+    //     return;  // Skip odd indices
+    // }
+
     if (col < num_states) {
         // Reused components for moments calculations
         float tmp_mu_z = mu_z[col];
-        float std_z = powf(var_z[col], 0.5);
+        float std_z = sqrtf(var_z[col]);
+        float tmp_var_z = var_z[col];
         float alpha = tmp_mu_z / std_z;
         float pdf_alpha = (1.0f / SQRT_2PI) * expf(-0.5f * alpha * alpha);
         float cdf_alpha = normcdf_cuda(alpha);
 
         // Moments calculations (L. Alric, 2024)
-        float tmp_mu_a = mu_z[col] * cdf_alpha + std_z * pdf_alpha;
-        mu_a[col] = tmp_mu_a;
-        var_a[col] = -tmp_mu_a * tmp_mu_a + 2 * tmp_mu_a * tmp_mu_z -
+        float tmp_mu_a = tmp_mu_z * cdf_alpha + std_z * pdf_alpha;
+        float tmp_var_a = -tmp_mu_a * tmp_mu_a + 2 * tmp_mu_a * tmp_mu_z -
                      tmp_mu_z * std_z * pdf_alpha +
-                     (var_z[col] - tmp_mu_z * tmp_mu_z) * cdf_alpha;
-        jcb[col] = cdf_alpha;
+                     (tmp_var_z - tmp_mu_z * tmp_mu_z) * cdf_alpha;
+        float tmp_jcb = cdf_alpha;// * tmp_var_z;
+        mu_a[col] = tmp_mu_a;
+        var_a[col] = tmp_var_a;
+        jcb[col] = tmp_jcb;
     }
 }
 
@@ -1198,41 +1206,108 @@ __global__ void leakyrelu_mean_var_cuda(float const *mu_z, float const *var_z,
 }
 
 __global__ void softmax_mean_var_cuda(float const *mu_z, float *var_z,
-                                      size_t output_size, int batch_size,
-                                      float *mu_a, float *jcb, float *var_a)
+    size_t output_size, int batch_size,
+    float *mu_a, float *jcb, float *var_a)
 /*
- */
+*/
 {
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i >= batch_size) return;
+int i = blockIdx.x * blockDim.x + threadIdx.x;
+if (i >= batch_size) return;
+constexpr float SQRT_2PI = 2.5066282746310002f;
 
-    float max_mu = mu_z[0];
-    float max_var = var_z[0];
+// Create a temporary variable to store vector of muM, varM, and cov_ZM
+float muM[10];
+float varM[10];
+float cov_ZM[10];
+float cov_M_M_sum[10];
 
-    for (int j = 1; j < output_size; j++) {
-        if (mu_z[j + i * output_size] > max_mu) {
-            max_mu = mu_z[j + i * output_size];
-            max_var = var_z[j + i * output_size];
-        }
-    }
+for (int j = 0; j < output_size; j++) {
+// mReLU
+float muZ = mu_z[j + i * output_size];
+float varZ = var_z[j + i * output_size];
+float stdZ = sqrtf(varZ);
+float alpha = muZ / stdZ;
+float cdfn = fmaxf(1e-20, normcdf_cuda(alpha));
+float pdfn = fmaxf(1e-20, (1.0f / SQRT_2PI) * expf(-0.5f * alpha * alpha));
+muM[j] = fmaxf(1e-20, stdZ * pdfn + muZ * cdfn);
+varM[j] = fmaxf(1e-6, -muM[j] * muM[j] + 2 * muM[j] * muZ - muZ * stdZ * pdfn +
+(varZ - muZ * muZ) * cdfn);
+cov_ZM[j] = cdfn * varZ;
+cov_M_M_sum[j] = varM[j];
+}
 
-    float sum_mu = 0.0f;
-    for (int j = 0; j < output_size; j++) {
-        sum_mu += expf(mu_z[j + i * output_size] - max_mu);
-    }
+// \tilde{M} = sum(M_i)
+float muM_sum = 0.0f;
+float varM_sum = 0.0f;
+for (int j = 0; j < output_size; j++) {
+muM_sum += muM[j];
+varM_sum += varM[j];
+}
 
-    float tmp_mu;
-    for (int j = 0; j < output_size; j++) {
-        tmp_mu = expf(mu_z[j + output_size * i] - max_mu) / sum_mu;
+// lnM = log(M_i)
+float mulnM[10];
+float varlnM[10];
+float cov_M_lnM[10];
+float cov_lnM_lnM_sum[10];
+for (int j = 0; j < output_size; j++) {
+varlnM[j] = logf(1.0f + fminf(10.0f, varM[j] / (muM[j] * muM[j])));
+mulnM[j] = logf(muM[j]) - 0.5f * varlnM[j];
+cov_M_lnM[j] = varlnM[j] * muM[j];
+cov_lnM_lnM_sum[j] = logf(1.0f + cov_M_M_sum[j] / muM[j] / muM_sum);
+}
 
-        mu_a[j + i * output_size] = tmp_mu;
+// ln\tilde{M} log(\tilde{M}_i)
+float varlnM_sum = logf(1.0f + fminf(10.0f, varM_sum / (muM_sum * muM_sum)));
+float mulnM_sum = logf(muM_sum) - 0.5f * varlnM_sum;
 
-        jcb[j + output_size * i] = tmp_mu * (1 - tmp_mu);
+// 1/\tilde{M} -> 1-ln\tilde{M}
+float varlnM_sum_inv = 1.0f / varlnM_sum;
+float mulnM_sum_inv = 1.0f - mulnM_sum;
 
-        var_a[j + output_size * i] = jcb[j + output_size * i] *
-                                     (var_z[j + output_size * i] + max_var) *
-                                     jcb[j + output_size * i];
-    }
+float muM_sum_inv = expf(mulnM_sum_inv + 0.5f * varlnM_sum_inv);
+float varM_sum_inv = muM_sum_inv * muM_sum_inv * (expf(varlnM_sum_inv) - 1.0f);
+
+float cov_M_M_sum_inv[10];
+for (int j = 0; j < output_size; j++) {
+cov_M_M_sum_inv[j] = (expf(cov_lnM_lnM_sum[j]) - 1.0f) *
+muM_sum * muM_sum_inv;
+}
+
+// \check{A}_i = lnM_i - ln\tilde{M}
+float mulnA[10];
+float varlnA[10];
+for (int j = 0; j < output_size; j++) {
+mulnA[j] = mulnM[j] - mulnM_sum;
+varlnA[j] = varlnM[j] + varlnM_sum -
+2 * cov_lnM_lnM_sum[j];
+}
+
+// A_i = normal
+float muA[10];
+float varA[10];
+float cov_ZA[10];
+float cov_cAlnM[10];
+float cov_AM[10];
+for (int j = 0; j < output_size; j++) {
+muA[j] = expf(mulnA[j] + 0.5f * varlnA[j]);
+cov_cAlnM[j] = varlnM[j] - cov_lnM_lnM_sum[j];    }
+float muA_sum = 0.0f;
+for (int j = 0; j < output_size; j++) {
+muA_sum += muA[j];
+}
+for (int j = 0; j < output_size; j++) {
+muA[j] = muA[j] / muA_sum;
+varA[j] = muA[j] * muA[j] * (expf(varlnA[j]) - 1.0f);
+cov_AM[j] = (expf(cov_cAlnM[j]) - 1.0f) * muA[j] * muM[j];
+
+cov_ZA[j] = fminf(cov_AM[j] / cov_ZM[j] * var_z[j], sqrtf(varA[j]) * sqrtf(var_z[j]));
+// cov_ZA[j] = cov_ZA[j] / var_z[j];
+
+mu_a[j + i * output_size] = muA[j];
+var_a[j + i * output_size] = varA[j];
+jcb[j + i * output_size] = cov_ZA[j];
+}
+
 }
 
 __global__ void remax_forward_cuda(float *mu_m, float *var_m, int no, int B,
@@ -1246,18 +1321,20 @@ __global__ void remax_forward_cuda(float *mu_m, float *var_m, int no, int B,
         int j = idx % no;  // Output index
 
         // Add for TAGI-V
-        if (idx % 2 == 0) {
-            atomicAdd(&sum_mu_global[i], mu_m[idx]);
-            atomicAdd(&sum_var_global[i], var_m[idx]);
-        }
+        // if (idx % 2 == 0) {
+        //     mu_m[idx] = fmaxf(1e-12f, mu_m[idx]);
+        //     var_m[idx] = fmaxf(1e-6f, var_m[idx]);
+        //     atomicAdd(&sum_mu_global[i], mu_m[idx]);
+        //     atomicAdd(&sum_var_global[i], var_m[idx]);
+        // }
 
         // Ensure mu_m and var_m have minimum values
-        // mu_m[idx] = fmaxf(1e-12f, mu_m[idx]);
-        // var_m[idx] = fmaxf(1e-6f, var_m[idx]);
+        mu_m[idx] = fmaxf(1e-12f, mu_m[idx]);
+        var_m[idx] = fmaxf(1e-6f, var_m[idx]);
 
         // Compute partial sums for the batch
-        // atomicAdd(&sum_mu_global[i], mu_m[idx]);
-        // atomicAdd(&sum_var_global[i], var_m[idx]);
+        atomicAdd(&sum_mu_global[i], mu_m[idx]);
+        atomicAdd(&sum_var_global[i], var_m[idx]);
     }
 }
 
@@ -1267,15 +1344,19 @@ __global__ void compute_remax_outputs(float *mu_m, float *var_m, int no, int B,
                                       float *sum_var_global) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
+    // if (idx % 2 != 0) {
+    //     return;  // Skip odd indices
+    // }
+
     if (idx < B * no) {
         int i = idx / no;  // Batch index
         int j = idx % no;  // Output index
         float mu_m_in = mu_m[idx];
 
-        float mu_square = fmaxf(mu_m[idx] * mu_m[idx], 1e-6f);
-        float mu_log_square = fmaxf(sum_mu_global[i] * sum_mu_global[i], 1e-6f);
-        // float mu_square = mu_m[idx] * mu_m[idx];
-        // float mu_log_square = sum_mu_global[i] * sum_mu_global[i];
+        // float mu_square = fmaxf(mu_m[idx] * mu_m[idx], 1e-6f);
+        // float mu_log_square = fmaxf(sum_mu_global[i] * sum_mu_global[i], 1e-6f);
+        float mu_square = mu_m[idx] * mu_m[idx];
+        float mu_log_square = sum_mu_global[i] * sum_mu_global[i];
 
         float var_log = logf(1.0f + (var_m[idx] / mu_square));
         float mu_log = logf(mu_m[idx]) - 0.5f * var_log;
@@ -1295,14 +1376,20 @@ __global__ void compute_remax_outputs(float *mu_m, float *var_m, int no, int B,
         float tmp_mu = mu_log - mu_logsum;
         float tmp_var = var_log + var_logsum - 2 * cov_log_logsum;
 
-        float tmp_mu_a = expf(tmp_mu + 0.5f * tmp_var);
-        float var = var_m[idx];
-        mu_a[idx] = tmp_mu_a;
-        // var_a[idx] = tmp_mu_a * tmp_mu_a * (expf(tmp_var) - 1.0f);
-        var_a[idx] = expf(2.0f * tmp_mu + tmp_var) * (expf(tmp_var) - 1.0f);
-        jcb[idx] *= tmp_mu_a * cov_a_hat_M / var;
-        // float cov_a_m = (expf(cov_a_hat_ln_M) - 1.0f) * mu_m_in * tmp_mu_a;
-        // jcb[idx] = cov_a_m / var * cov_Z_M;
+        float mu_a_tmp = expf(tmp_mu + 0.5f * tmp_var);
+        float var_a_tmp = expf(2.0f * tmp_mu + tmp_var) *
+                        (expf(tmp_var) - 1.0f);
+
+        float cov_A_M = (expf(cov_a_hat_ln_M) - 1.0f) * mu_m[idx] *
+                        mu_a_tmp;
+
+        float cov_A_Z = fminf(sqrtf(var_a_tmp) * sqrtf(var_m[idx]),
+                              cov_A_M / var_m[idx] * cov_Z_M);
+
+        mu_a[idx] = mu_a_tmp;
+        var_a[idx] = var_a_tmp;
+        jcb[idx] = cov_A_Z;
+
     }
 }
 

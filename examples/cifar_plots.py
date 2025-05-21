@@ -186,49 +186,6 @@ def find_and_plot_ambiguous_images(images, m_preds, v_preds, threshold=0.5, min_
 
     return ambiguous_indices
 
-def probs_from_logits(m_pred, v_pred, nb_classes):
-    muZ = m_pred
-    varZ = v_pred
-
-    muE = np.exp(muZ + 0.5 * varZ)
-    varE = np.exp(2 * muZ + varZ) * (np.exp(varZ) - 1)
-
-    # Sum of muE and varE over mini-batch
-    muE_sum = []
-    varE_sum = []
-    for i in range(0, len(muE), nb_classes):
-        muE_sum.append(np.sum(muE[i : i + nb_classes]))
-        varE_sum.append(np.sum(varE[i : i + nb_classes]))
-
-    muE_sum = np.array(muE_sum)
-    varE_sum = np.array(varE_sum)
-
-    # Log of the sum of muE and varE
-    log_muE_sum = []
-    log_varE_sum = []
-    for i in range(0, len(muE_sum)):
-        tmp = np.log(1 + varE_sum[i] / (muE_sum[i] ** 2))
-        log_varE_sum.append(tmp)
-        log_muE_sum.append(np.log(muE_sum[i]) - 0.5 * tmp)
-
-    # cov_Z_log_sumE = ln(1 + varE / muE_sum / muE)
-    cov_Z_log_sumE = []
-    for i in range(0, len(muE)):
-        cov_Z_log_sumE.append(np.log(1 + varE[i] / muE_sum[i // nb_classes] / muE[i]))
-
-    log_muE_sum = np.array(log_muE_sum)
-    log_varE_sum = np.array(log_varE_sum)
-    cov_Z_log_sumE = np.array(cov_Z_log_sumE)
-
-    # Do division as subtraction
-    muA_cap = muZ - log_muE_sum.repeat(nb_classes)
-    varA_cap = varZ + log_varE_sum.repeat(nb_classes) - 2 * cov_Z_log_sumE
-
-    muA = np.exp(muA_cap + 0.5 * varA_cap)
-    varA = muA ** 2 * (np.exp(varA_cap) - 1)
-
-    return muA, varA
-
 
 def custom_collate_fn(batch):
     # batch is a list of tuples (image, label)
