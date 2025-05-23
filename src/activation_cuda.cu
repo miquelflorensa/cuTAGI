@@ -1043,12 +1043,12 @@ __global__ void even_exp_mean_var_cuda(float const *mu_z, float const *var_z,
 
     if (col < num_states) {
         if (col % 2 == 0) {
-            // mu_a[col] = mu_z[col];
-            // var_a[col] = var_z[col];
-            // jcb_a[col] = jcb_z[col];
-            mu_a[col] = mu_z[col] * 10.0f;
-            var_a[col] = var_z[col] * 100.0f;
-            jcb_a[col] = jcb_z[col] * 10.0f;
+            mu_a[col] = mu_z[col];
+            var_a[col] = var_z[col];
+            jcb_a[col] = jcb_z[col];
+            // mu_a[col] = mu_z[col] * 10.0f;
+            // var_a[col] = var_z[col] * 100.0f;
+            // jcb_a[col] = jcb_z[col] * 10.0f;
         } else {
             float muA = expf(mu_z[col] + 0.5f * var_z[col]);
             mu_a[col] = muA;

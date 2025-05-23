@@ -93,8 +93,8 @@ __global__ void update_delta_z_cuda_heteros(float const *mu_a,
         // Compute updating quantities for the mean of the output
         // Avoid non-identifiability problem by overfitting the delta_mu,
         // not letting the model to be "lazy".
-        float tmp_mu = 10.0f * jcb_col / (var_a_col + 0.01f);
-        float tmp_var = 10.0f * jcb_col / var_sum;
+        float tmp_mu = jcb_col / (var_a_col + 0.01f);
+        float tmp_var = jcb_col / var_sum;
         if (std::isinf(tmp_mu) || std::isnan(tmp_mu) ||
             std::isinf(tmp_var) || std::isnan(tmp_var)) {
             delta_mu[obs_col] = zero_pad;
