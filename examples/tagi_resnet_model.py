@@ -10,6 +10,7 @@ from pytagi.nn import (
     ReLU,
     ResNetBlock,
     Sequential,
+    EvenExp,
 )
 
 
@@ -128,7 +129,8 @@ def resnet18_cifar10(gain_w: float = 1, gain_b: float = 1) -> Sequential:
 
     final_layers = [
         AvgPool2d(4),
-        Linear(512, 11, gain_weight=gain_w, gain_bias=gain_b),
+        Linear(512, 20, gain_weight=gain_w, gain_bias=gain_b),
+        EvenExp(),
     ]
 
     return Sequential(*initial_layers, *resnet_layers, *final_layers)

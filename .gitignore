@@ -3,6 +3,11 @@
 *.vscode
 *.json
 *.csv
+*.log
+*.txt
+*.png
+*.out
+*.bin
 debug_data/
 saved_param/
 kernel_playground/
@@ -15,12 +20,11 @@ dist
 # folders
 data/cifar
 data/mnist/
-data/MNIST/
 data/traffic
 data/imagenet
 test_model/
-wandb/
 saved_results/param_viz
+wandb
 
 # VSCode
 .vscode
