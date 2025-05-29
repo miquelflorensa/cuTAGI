@@ -281,7 +281,7 @@ def tagi_trainer(
 
             y = np.full((len(labels) * nb_classes,), -3.0, dtype=np.float32)
             for i in range(len(labels)):
-                y[i * nb_classes + labels[i]] = 3.0
+                y[i * nb_classes + labels[i]] = 10.0
 
             out_updater.update_heteros(
                 output_states=net.output_z_buffer,
