@@ -26,15 +26,16 @@ from pytagi.nn import (
     ReLU,
     MixtureReLU,
     Sequential,
+    EvenExp,
 )
-from examples.tagi_resnet_model import resnet18_cifar10
+from examples.tagi_resnet_model import resnet18_cifar100
 from examples.torch_resnet_model import ResNet18
 
 torch.manual_seed(17)
 
 # Constants for dataset normalization
-NORMALIZATION_MEAN = [0.4914, 0.4822, 0.4465]
-NORMALIZATION_STD = [0.2470, 0.2435, 0.2616]
+NORMALIZATION_MEAN = [0.5071, 0.4867, 0.4408]
+NORMALIZATION_STD = [0.2675, 0.2565, 0.2761]
 
 TAGI_CNN_NET = Sequential(
     # 32x32
@@ -57,15 +58,8 @@ TAGI_CNN_NET = Sequential(
     MixtureReLU(),
     Linear(256, 128),
     MixtureReLU(),
-    Linear(128, 11),
-)
-
-TAGI_FNN = Sequential(
-    Linear(32 * 32 * 3, 4096),
-    ReLU(),
-    Linear(4096, 4096),
-    ReLU(),
-    Linear(4096, 11),
+    Linear(128, 200),
+    EvenExp(),
 )
 
 
@@ -154,7 +148,7 @@ def custom_collate_fn(batch):
 
 
 def load_datasets(batch_size: int, framework: str = "tagi"):
-    """Load and transform CIFAR10 training and test datasets."""
+    """Load and transform CIFAR100 training and test datasets."""
     transform_train = transforms.Compose(
         [
             transforms.RandomCrop(32, padding=4),
@@ -173,10 +167,10 @@ def load_datasets(batch_size: int, framework: str = "tagi"):
         ]
     )
 
-    train_set = torchvision.datasets.CIFAR10(
+    train_set = torchvision.datasets.CIFAR100(
         root="./data/cifar", train=True, download=True, transform=transform_train
     )
-    test_set = torchvision.datasets.CIFAR10(
+    test_set = torchvision.datasets.CIFAR100(
         root="./data/cifar", train=False, download=True, transform=transform_test
     )
 
@@ -222,12 +216,12 @@ def tagi_trainer(
     train_loader, test_loader = load_datasets(batch_size, "tagi")
 
     # Hierachical Softmax
-    metric = HRCSoftmaxMetric(num_classes=10)
-    nb_classes = 10
+    metric = HRCSoftmaxMetric(num_classes=100)
+    nb_classes = 100
 
     # Resnet18
     # net = TAGI_CNN_NET
-    net = resnet18_cifar10(gain_w=0.083, gain_b=0.083)
+    net = resnet18_cifar100(gain_w=0.083, gain_b=0.083)
     net.to_device(device)
     # net.set_threads(10)
     out_updater = OutputUpdater(net.device)
@@ -315,7 +309,7 @@ def tagi_trainer(
             # error_rates.append(error / len(labels))
 
             # Calculate error rate
-            pred = np.reshape(m_pred, (len(labels), 10))
+            pred = np.reshape(m_pred, (len(labels), 100))
             label = np.argmax(pred, axis=1)
             train_error += np.sum(label != labels)
             num_train_samples += len(labels)
@@ -349,7 +343,7 @@ def tagi_trainer(
             m_pred = m_pred[::2]
 
             # Calculate test error
-            pred = np.reshape(m_pred, (len(labels), 10))
+            pred = np.reshape(m_pred, (len(labels), 100))
             label = np.argmax(pred, axis=1)
             test_error += np.sum(label != labels)
             num_test_samples += len(labels)
@@ -367,7 +361,7 @@ def tagi_trainer(
         #     refresh=True,
         # )
 
-    net.save("models_bin/cifar_resnet_50_logits_04_165.bin")
+    net.save("models_bin/cifar100_resnet_50_logits_04_165.bin")
     print("Training complete.")
 
 
@@ -442,9 +436,9 @@ def torch_trainer(batch_size: int, num_epochs: int, device: str = "cuda"):
 
 
 def main(
-    framework: str = "torch",
+    framework: str = "tagi",
     batch_size: int = 128,
-    epochs: int = 30,
+    epochs: int = 50,
     device: str = "cuda",
     sigma_v: float = 0.05,
 ):

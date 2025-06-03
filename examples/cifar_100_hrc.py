@@ -9,32 +9,33 @@ sys.path.append(
 import fire
 import numpy as np
 import torch
+import torch.nn as nn
+import torch.optim as optim
 import torchvision
 import torchvision.transforms.v2 as transforms
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-import torch.nn as nn
-import torch.optim as optim
 
+import pytagi
+from examples.tagi_resnet_model import resnet18_cifar100
+from examples.torch_resnet_model import ResNet18
 from pytagi import HRCSoftmaxMetric, Utils, exponential_scheduler
 from pytagi.nn import (
     AvgPool2d,
     BatchNorm2d,
     Conv2d,
     Linear,
+    MixtureReLU,
     OutputUpdater,
     ReLU,
-    MixtureReLU,
     Sequential,
 )
-from examples.tagi_resnet_model import resnet18_cifar10
-from examples.torch_resnet_model import ResNet18
 
 torch.manual_seed(17)
 
 # Constants for dataset normalization
-NORMALIZATION_MEAN = [0.4914, 0.4822, 0.4465]
-NORMALIZATION_STD = [0.2470, 0.2435, 0.2616]
+NORMALIZATION_MEAN = [0.5071, 0.4867, 0.4408]
+NORMALIZATION_STD = [0.2675, 0.2565, 0.2761]
 
 TAGI_CNN_NET = Sequential(
     # 32x32
@@ -154,14 +155,16 @@ def custom_collate_fn(batch):
 
 
 def load_datasets(batch_size: int, framework: str = "tagi"):
-    """Load and transform CIFAR10 training and test datasets."""
+    """Load and transform CIFAR100 training and test datasets."""
     transform_train = transforms.Compose(
         [
             transforms.RandomCrop(32, padding=4),
             transforms.RandomHorizontalFlip(p=0.5),
             transforms.ToImage(),
             transforms.ConvertImageDtype(torch.float32),
-            transforms.Normalize(mean=NORMALIZATION_MEAN, std=NORMALIZATION_STD),
+            transforms.Normalize(
+                mean=NORMALIZATION_MEAN, std=NORMALIZATION_STD
+            ),
         ]
     )
 
@@ -169,15 +172,23 @@ def load_datasets(batch_size: int, framework: str = "tagi"):
         [
             transforms.ToImage(),
             transforms.ConvertImageDtype(torch.float32),
-            transforms.Normalize(mean=NORMALIZATION_MEAN, std=NORMALIZATION_STD),
+            transforms.Normalize(
+                mean=NORMALIZATION_MEAN, std=NORMALIZATION_STD
+            ),
         ]
     )
 
-    train_set = torchvision.datasets.CIFAR10(
-        root="./data/cifar", train=True, download=True, transform=transform_train
+    train_set = torchvision.datasets.CIFAR100(
+        root="./data/cifar",
+        train=True,
+        download=True,
+        transform=transform_train,
     )
-    test_set = torchvision.datasets.CIFAR10(
-        root="./data/cifar", train=False, download=True, transform=transform_test
+    test_set = torchvision.datasets.CIFAR100(
+        root="./data/cifar",
+        train=False,
+        download=True,
+        transform=transform_test,
     )
 
     if framework == "torch":
@@ -222,152 +233,83 @@ def tagi_trainer(
     train_loader, test_loader = load_datasets(batch_size, "tagi")
 
     # Hierachical Softmax
-    metric = HRCSoftmaxMetric(num_classes=10)
-    nb_classes = 10
+    metric = HRCSoftmaxMetric(num_classes=100)
 
     # Resnet18
     # net = TAGI_CNN_NET
-    net = resnet18_cifar10(gain_w=0.083, gain_b=0.083)
-    net.to_device(device)
-    # net.set_threads(10)
+    net = resnet18_cifar100(gain_w=0.10, gain_b=0.10)
+    if pytagi.cuda.is_available() and device == "cuda":
+        net.to_device(device)
+    else:
+        net.set_threads(8)
     out_updater = OutputUpdater(net.device)
 
     # Training
     var_y = np.full(
-        (batch_size * nb_classes,), sigma_v**2, dtype=np.float32
+        (batch_size * metric.hrc_softmax.num_obs,), sigma_v**2, dtype=np.float32
     )
-    net.preinit_layer()
-
-    print_var = True
-    for epoch in range(num_epochs):
+    pbar = tqdm(range(num_epochs), desc="Training Progress")
+    print_var = False
+    for epoch in pbar:
         error_rates = []
-        state_dict = net.state_dict()
-        # print('\n')
-        # for l in ['Conv2dCuda.0','LinearCuda.12']:
-        #     print(l, 'E[ mu_w]±std: ',np.average(np.abs(state_dict[l][0])),' ± ' , np.std(state_dict[l][0]))
-        #     print(l, 'E[std_w]±std: ',np.average(np.sqrt(state_dict[l][1])),' ± ' , np.std(np.sqrt(state_dict[l][1])))
-        # print('\n')
-        # if epoch > 0:
-        #     sigma_v = exponential_scheduler(
-        #         curr_v=sigma_v, min_v=0.1, decaying_factor=1, curr_iter=epoch
-        #     )
-        #     var_y = np.full(
-        #         (batch_size * nb_classes,),
-        #         sigma_v**2,
-        #         dtype=np.float32,
-        #     )
+        if epoch > 0:
+            sigma_v = exponential_scheduler(
+                curr_v=sigma_v, min_v=0, decaying_factor=1, curr_iter=epoch
+            )
+            var_y = np.full(
+                (batch_size * metric.hrc_softmax.num_obs,),
+                sigma_v**2,
+                dtype=np.float32,
+            )
         net.train()
-        train_error = 0
-        num_train_samples = 0
-        pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs}")
-        for batch_idx, (x, labels) in enumerate(pbar):
+        for x, labels in train_loader:
             # Feedforward and backward pass
-            m_pred, v_pred = net(x.flatten())
+            m_pred, v_pred = net(x)
             if print_var:  # Print prior predictive variance
-                        print(
-                            "Prior predictive -> E[v_pred] = ",
-                            np.average(v_pred),
-                            " | E[s_pred]",
-                            np.average(np.sqrt(v_pred)),
-                        )
-                        print(
-                            "                 -> V[m_pred] = ",
-                            np.var(m_pred),
-                            " | s[m_pred]",
-                            np.std(m_pred),
-                        )
-                        print_var = False
+                print(
+                    "Prior predictive -> E[v_pred] = ",
+                    np.average(v_pred),
+                    "+-",
+                    np.std(v_pred),
+                )
+                print_var = False
 
-
-            y = np.full((len(labels) * nb_classes,), -0.4, dtype=np.float32)
-            for i in range(len(labels)):
-                y[i * nb_classes + labels[i]] = 16.5
-
-            out_updater.update_heteros(
+            # Update output layers based on targets
+            y, y_idx, _ = utils.label_to_obs(labels=labels, num_classes=100)
+            out_updater.update_using_indices(
                 output_states=net.output_z_buffer,
                 mu_obs=y,
+                var_obs=var_y,
+                selected_idx=y_idx,
                 delta_states=net.input_delta_z_buffer,
             )
 
-            print("mZ: ", m_pred)
-            print("vZ: ", v_pred)
-
-            v_pred = v_pred[::2] + m_pred[1::2]
-            m_pred = m_pred[::2]
-
-            # print(f"mZ: {m_pred}")
-            # print(f"vZ: {v_pred}")
-            # print(f"Sum m_pred: {np.sum(m_pred)}")
-
+            # Update parameters
             net.backward()
             net.step()
 
             # Training metric
-            # error_rate = metric.error_rate(m_pred, v_pred, labels)
-            # error_rates.append(error_rate)
-            # error = 0
-            # for i in range(len(labels)):
-            #     pred = np.argmax(m_pred[i * 10 : (i + 1) * 10])
-            #     if pred != labels[i]:
-            #         error += 1
-            #     # print(f"Predicted: {pred} | Actual: {labels[i]}")
-
-            # error_rates.append(error / len(labels))
-
-            # Calculate error rate
-            pred = np.reshape(m_pred, (len(labels), 10))
-            label = np.argmax(pred, axis=1)
-            train_error += np.sum(label != labels)
-            num_train_samples += len(labels)
-
-            # Update progress bar
-            pbar.set_postfix(
-                {"train_error": f"{train_error/num_train_samples:.2f}%"}
-            )
-
+            error_rate = metric.error_rate(m_pred, v_pred, labels)
+            error_rates.append(error_rate)
 
         # Averaged error
         avg_error_rate = sum(error_rates[-100:])
 
         # Testing
         test_error_rates = []
-        test_error = 0
-        num_test_samples = 0
         net.eval()
         for x, labels in test_loader:
-            m_pred, v_pred = net(x.flatten())
+            m_pred, v_pred = net(x)
 
-            # for i in range(len(labels)):
-            #     pred = np.argmax(m_pred[i * 10 : (i + 1) * 10])
-            #     if pred != labels[i]:
-            #         test_error_rates.append(1)
-            #     else:
-            #         test_error_rates.append(0)
-                # print(f"Predicted: {pred} | Actual: {labels[i]}")
+            # Training metric
+            error_rate = metric.error_rate(m_pred, v_pred, labels)
+            test_error_rates.append(error_rate)
 
-            v_pred = v_pred[::2] + m_pred[1::2]
-            m_pred = m_pred[::2]
-
-            # Calculate test error
-            pred = np.reshape(m_pred, (len(labels), 10))
-            label = np.argmax(pred, axis=1)
-            test_error += np.sum(label != labels)
-            num_test_samples += len(labels)
-
-        test_error_rate = (test_error / num_test_samples) * 100
-        print(
-            f"\nEpoch {epoch+1}/{num_epochs}: "
-            f"Train Error: {train_error/num_train_samples * 100:.2f}% | "
-            f"Test Error: {test_error_rate:.2f}%"
+        test_error_rate = sum(test_error_rates) / len(test_error_rates)
+        pbar.set_description(
+            f"Epoch {epoch + 1}/{num_epochs} | training error: {avg_error_rate:.2f}% | test error: {test_error_rate * 100:.2f}%",
+            refresh=True,
         )
-
-        # test_error_rate = sum(test_error_rates) / len(test_error_rates)
-        # pbar.set_description(
-        #     f"Epoch {epoch + 1}/{num_epochs} | training error: {avg_error_rate:.2f}% | test error: {test_error_rate * 100:.2f}%",
-        #     refresh=True,
-        # )
-
-    net.save("models_bin/cifar_resnet_50_logits_04_165.bin")
     print("Training complete.")
 
 
@@ -437,27 +379,23 @@ def torch_trainer(batch_size: int, num_epochs: int, device: str = "cuda"):
             f"Epoch# {epoch +1}/{num_epochs}| training error: {avg_error_rate:.2f}% | Test error: {test_error_rate: .2f}%\n",
             refresh=False,
         )
-    model_path = "models_bin/cifar_torch_resnet18.bin"
-    torch.save(model.state_dict(), model_path)
 
 
 def main(
-    framework: str = "torch",
-    batch_size: int = 128,
-    epochs: int = 30,
+    framework: str = "tagi",
+    batch_size: int = 256,
+    epochs: int = 50,
     device: str = "cuda",
-    sigma_v: float = 0.05,
+    sigma_v: float = 0.1,
 ):
-    import torch
-    print("PyTorch version:", torch.__version__)
-    print("CUDA available:", torch.cuda.is_available())
-    print("CUDA version (from torch):", torch.version.cuda)
-    print("GPU count:", torch.cuda.device_count())
     if framework == "torch":
         torch_trainer(batch_size=batch_size, num_epochs=epochs, device=device)
     elif framework == "tagi":
         tagi_trainer(
-            batch_size=batch_size, num_epochs=epochs, device=device, sigma_v=sigma_v
+            batch_size=batch_size,
+            num_epochs=epochs,
+            device=device,
+            sigma_v=sigma_v,
         )
     else:
         raise RuntimeError(f"Invalid Framework: {framework}")
