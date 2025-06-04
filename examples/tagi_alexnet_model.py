@@ -6,6 +6,7 @@ from pytagi.nn import (
     MixtureReLU,
     ReLU,
     Sequential,
+    EvenExp,
 )
 
 
@@ -84,6 +85,86 @@ def create_alexnet(
         Linear(4096, 4096, gain_weight=gain_w, gain_bias=gain_b),
         ReLU(),
         Linear(4096, nb_outputs, gain_weight=gain_w, gain_bias=gain_b),
+        EvenExp(),
+    )
+
+    return alex_net
+
+def create_alexnet_cifar100(
+    gain_w: float = 1, gain_b: float = 1, nb_outputs: int = 200
+):
+    alex_net = Sequential(
+        # 32x32
+        Conv2d(
+            3,
+            64,
+            3,
+            stride=1,
+            padding=1,
+            gain_weight=gain_w,
+            gain_bias=gain_b,
+            in_width=32,
+            in_height=32,
+            bias=False,
+        ),
+        ReLU(),
+        # 32x32
+        AvgPool2d(2, 2),
+        # 16x16
+        Conv2d(
+            64,
+            192,
+            3,
+            bias=False,
+            padding=1,
+            gain_weight=gain_w,
+            gain_bias=gain_b,
+        ),
+        ReLU(),
+        # 16x16
+        AvgPool2d(2, 2),
+        # 8x8
+        Conv2d(
+            192,
+            384,
+            3,
+            bias=False,
+            padding=1,
+            gain_weight=gain_w,
+            gain_bias=gain_b,
+        ),
+        ReLU(),
+        # 8x8
+        Conv2d(
+            384,
+            256,
+            3,
+            bias=False,
+            padding=1,
+            gain_weight=gain_w,
+            gain_bias=gain_b,
+        ),
+        ReLU(),
+        # 8x8
+        Conv2d(
+            256,
+            256,
+            3,
+            bias=False,
+            padding=1,
+            gain_weight=gain_w,
+            gain_bias=gain_b,
+        ),
+        ReLU(),
+        # 8x8
+        AvgPool2d(2, 2),
+        # 4x4
+        Linear(256 * 4 * 4, 4096, gain_weight=gain_w, gain_bias=gain_b),
+        ReLU(),
+        Linear(4096, 4096, gain_weight=gain_w, gain_bias=gain_b),
+        ReLU(),
+        Linear(4096, nb_outputs, gain_weight=gain_w, gain_bias=gain_b),
+        EvenExp(),
     )
 
     return alex_net

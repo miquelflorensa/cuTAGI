@@ -29,6 +29,7 @@ from pytagi.nn import (
     EvenExp,
 )
 from examples.tagi_resnet_model import resnet18_cifar100
+from examples.tagi_alexnet_model import create_alexnet_cifar100
 from examples.torch_resnet_model import ResNet18
 
 torch.manual_seed(17)
@@ -221,7 +222,7 @@ def tagi_trainer(
 
     # Resnet18
     # net = TAGI_CNN_NET
-    net = resnet18_cifar100(gain_w=0.083, gain_b=0.083)
+    net = create_alexnet_cifar100(gain_w=0.083, gain_b=0.083)
     net.to_device(device)
     # net.set_threads(10)
     out_updater = OutputUpdater(net.device)
@@ -438,7 +439,7 @@ def torch_trainer(batch_size: int, num_epochs: int, device: str = "cuda"):
 def main(
     framework: str = "tagi",
     batch_size: int = 128,
-    epochs: int = 50,
+    epochs: int = 100,
     device: str = "cuda",
     sigma_v: float = 0.05,
 ):

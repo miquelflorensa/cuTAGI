@@ -167,7 +167,7 @@ def tagi_trainer(
     # Resnet18
     # net = resnet18_imagenet(gain_w=0.1, gain_b=0.1, nb_outputs=metric.hrc_softmax.len)
     net = create_alexnet(
-        gain_w=0.1, gain_b=0.1, nb_outputs=metric.hrc_softmax.len
+        gain_w=0.1, gain_b=0.1, nb_outputs=nb_classes*2
     )
     device = "cpu" if not pytagi.cuda.is_available() else device
     net.to_device(device)
@@ -202,6 +202,8 @@ def tagi_trainer(
             ) as batch_pbar:
                 for i, (x, labels) in enumerate(batch_pbar):
                     m_pred, v_pred = net(x)
+                    v_pred = v_pred[::2] + m_pred[1::2]
+                    m_pred = m_pred[::2]
                     if np.isnan(np.mean(m_pred)):
                         print("m_pred is nan")
                         break
@@ -220,88 +222,55 @@ def tagi_trainer(
                         )
                         print_var = False
 
-                    # Update output layers based on targets
-                    y, y_idx, _ = utils.label_to_obs(
-                        labels=labels, num_classes=nb_classes
-                    )
-                    out_updater.update_using_indices(
+                    y = np.full((len(labels) * nb_classes,), -0.4, dtype=np.float32)
+                    for i in range(len(labels)):
+                        y[i * nb_classes + labels[i]] = 16.5
+
+                    out_updater.update_heteros(
                         output_states=net.output_z_buffer,
-                        mu_obs=y / 1,
-                        var_obs=var_y,
-                        selected_idx=y_idx,
+                        mu_obs=y,
                         delta_states=net.input_delta_z_buffer,
                     )
                     net.backward()
                     net.step()
 
-                    # Training metric
-                    pred = metric.get_predicted_labels(m_pred, v_pred)
-                    train_correct += np.sum(pred == labels)
+                    # Calculate error rate
+                    pred = np.reshape(m_pred, (len(labels), 100))
+                    label = np.argmax(pred, axis=1)
+                    train_error += np.sum(label != labels)
+                    num_train_samples += len(labels)
 
-                    if i > 0 and i % 100 == 0:
-                        avg_error_rate = (
-                            1.0 - (train_correct / ((i + 1) * batch_size))
-                        ) * 100
-                        batch_pbar.set_description(
-                            f"Training error: {avg_error_rate:.2f}%",
-                            refresh=True,
-                        )
-
-            # Averaged training error
-            avg_error_rate = (
-                1.0 - train_correct / len(train_loader.dataset)
-            ) * 100
-
-            # Get batchnorm statistics
-            if viz_norm_stats:
-                train_norm_stats = net.get_norm_mean_var()
-                batch_norm_viz.update(train_norm_stats, "train")
-
-            # Param viz
-            if viz_param:
-                state_dict = net.state_dict()
-                param_viz.record_params(state_dict)
-                param_viz.plot_distributions(
-                    output_dir="saved_results/param_viz"
-                )
-                param_viz.plot_initial_vs_final_differences(
-                    output_dir="saved_results/param_viz"
-                )
+                    # Update progress bar
+                    epoch_pbar.set_postfix(
+                        {"train_error": f"{train_error/num_train_samples:.2f}%"}
+                    )
 
             # Testing
-            correct = 0
+            test_error_rates = []
+            test_error = 0
+            num_test_samples = 0
             net.eval()
             for x, labels in test_loader:
                 m_pred, v_pred = net(x)
 
-                # Training metric
-                pred = metric.get_predicted_labels(m_pred, v_pred)
-                correct += np.sum(pred == labels)
+                v_pred = v_pred[::2] + m_pred[1::2]
+                m_pred = m_pred[::2]
 
-                if viz_norm_stats and epoch == num_epochs - 1:
-                    test_norm_stats = net.get_norm_mean_var()
-                    batch_norm_viz.update(test_norm_stats, "test")
-                    batch_norm_viz.plot_all_layers(
-                        folder_name="saved_results/batchnorm"
-                    )
+                # Calculate test error
+                pred = np.reshape(m_pred, (len(labels), 100))
+                label = np.argmax(pred, axis=1)
+                test_error += np.sum(label != labels)
+                num_test_samples += len(labels)
 
-            test_error_rate = (1.0 - correct / len(test_loader.dataset)) * 100
 
-            if print_param_stat:
-                param_stat.record_params(net.state_dict())
-                param_stat.print_current_parameter_distributions(topN=10)
-                if is_tracking:
-                    log_data = param_stat.rows_to_dict()
-                    log_data["train_error"] = avg_error_rate
-                    log_data["test_error"] = test_error_rate
-                    wandb_logger.log(log_data)
+        test_error_rate = (test_error / num_test_samples) * 100
+        print(
+            f"\nEpoch {epoch+1}/{num_epochs}: "
+            f"Train Error: {train_error/num_train_samples * 100:.2f}% | "
+            f"Test Error: {test_error_rate:.2f}%"
+        )
 
-            epoch_pbar.set_description(
-                f"Epoch {epoch + 1}/{num_epochs} | training error: {avg_error_rate:.2f}% | test error: {test_error_rate:.2f}%",
-                refresh=True,
-            )
-    if is_tracking:
-        wandb_logger.finish()
+    net.save("models_bin/imagenet_alexnet_5_logits_04_165.bin")
     print("Training complete.")
 
 
