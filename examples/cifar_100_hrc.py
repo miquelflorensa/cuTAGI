@@ -18,6 +18,7 @@ from tqdm import tqdm
 
 import pytagi
 from examples.tagi_resnet_model import resnet18_cifar100
+from examples.tagi_alexnet_model import create_alexnet_cifar100
 from examples.torch_resnet_model import ResNet18
 from pytagi import HRCSoftmaxMetric, Utils, exponential_scheduler
 from pytagi.nn import (
@@ -237,7 +238,8 @@ def tagi_trainer(
 
     # Resnet18
     # net = TAGI_CNN_NET
-    net = resnet18_cifar100(gain_w=0.10, gain_b=0.10)
+    # net = resnet18_cifar100(gain_w=0.10, gain_b=0.10)
+    net = create_alexnet_cifar100(gain_w=0.083, gain_b=0.083, nb_outputs=101)
     if pytagi.cuda.is_available() and device == "cuda":
         net.to_device(device)
     else:

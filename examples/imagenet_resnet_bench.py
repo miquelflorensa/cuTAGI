@@ -51,7 +51,7 @@ def custom_collate_fn(batch):
 def load_datasets(batch_size: int, framework: str = "torch", nb_classes=1000):
     """Load the ImageNet dataset."""
     # Data Transforms
-    data_dir = "./data/imagenet/ILSVRC/Data/CLS-LOC"
+    data_dir = "../imagenet/ILSVRC/Data/CLS-LOC"
     norm_mean = [0.485, 0.456, 0.406]
     norm_std = [0.229, 0.224, 0.225]
     train_transforms = transforms.Compose(
@@ -167,7 +167,7 @@ def tagi_trainer(
     # Resnet18
     # net = resnet18_imagenet(gain_w=0.1, gain_b=0.1, nb_outputs=metric.hrc_softmax.len)
     net = create_alexnet(
-        gain_w=0.1, gain_b=0.1, nb_outputs=nb_classes*2
+        gain_w=0.05, gain_b=0.05, nb_outputs=nb_classes*2
     )
     device = "cpu" if not pytagi.cuda.is_available() else device
     net.to_device(device)
@@ -196,6 +196,8 @@ def tagi_trainer(
         for epoch in epoch_pbar:
             train_correct = 0
             net.train()
+            train_error = 0
+            num_train_samples = 0
             with tqdm(
                 train_loader,
                 desc=f"Epoch {epoch + 1}/{num_epochs} - Batch Progress",
@@ -235,7 +237,7 @@ def tagi_trainer(
                     net.step()
 
                     # Calculate error rate
-                    pred = np.reshape(m_pred, (len(labels), 100))
+                    pred = np.reshape(m_pred, (len(labels), nb_classes))
                     label = np.argmax(pred, axis=1)
                     train_error += np.sum(label != labels)
                     num_train_samples += len(labels)
@@ -245,30 +247,30 @@ def tagi_trainer(
                         {"train_error": f"{train_error/num_train_samples:.2f}%"}
                     )
 
-            # Testing
-            test_error_rates = []
-            test_error = 0
-            num_test_samples = 0
-            net.eval()
-            for x, labels in test_loader:
-                m_pred, v_pred = net(x)
+                # Testing
+                test_error_rates = []
+                test_error = 0
+                num_test_samples = 0
+                net.eval()
+                for x, labels in test_loader:
+                    m_pred, v_pred = net(x)
 
-                v_pred = v_pred[::2] + m_pred[1::2]
-                m_pred = m_pred[::2]
+                    v_pred = v_pred[::2] + m_pred[1::2]
+                    m_pred = m_pred[::2]
 
-                # Calculate test error
-                pred = np.reshape(m_pred, (len(labels), 100))
-                label = np.argmax(pred, axis=1)
-                test_error += np.sum(label != labels)
-                num_test_samples += len(labels)
+                    # Calculate test error
+                    pred = np.reshape(m_pred, (len(labels), nb_classes))
+                    label = np.argmax(pred, axis=1)
+                    test_error += np.sum(label != labels)
+                    num_test_samples += len(labels)
 
 
-        test_error_rate = (test_error / num_test_samples) * 100
-        print(
-            f"\nEpoch {epoch+1}/{num_epochs}: "
-            f"Train Error: {train_error/num_train_samples * 100:.2f}% | "
-            f"Test Error: {test_error_rate:.2f}%"
-        )
+                test_error_rate = (test_error / num_test_samples) * 100
+                print(
+                    f"\nEpoch {epoch+1}/{num_epochs}: "
+                    f"Train Error: {train_error/num_train_samples * 100:.2f}% | "
+                    f"Test Error: {test_error_rate:.2f}%"
+                )
 
     net.save("models_bin/imagenet_alexnet_5_logits_04_165.bin")
     print("Training complete.")
@@ -373,10 +375,10 @@ def torch_trainer(
 def main(
     framework: str = "tagi",
     batch_size: int = 128,
-    epochs: int = 20,
+    epochs: int = 10,
     device: str = "cuda",
     sigma_v: float = 0.1,
-    nb_classes: int = 8,
+    nb_classes: int = 64,
 ):
     if framework == "torch":
         torch_trainer(

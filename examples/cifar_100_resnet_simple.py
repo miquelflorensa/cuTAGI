@@ -222,7 +222,7 @@ def tagi_trainer(
 
     # Resnet18
     # net = TAGI_CNN_NET
-    net = create_alexnet_cifar100(gain_w=0.083, gain_b=0.083)
+    net = create_alexnet_cifar100(gain_w=0.083, gain_b=0.083, nb_outputs=nb_classes)
     net.to_device(device)
     # net.set_threads(10)
     out_updater = OutputUpdater(net.device)
@@ -246,11 +246,11 @@ def tagi_trainer(
         #     sigma_v = exponential_scheduler(
         #         curr_v=sigma_v, min_v=0.1, decaying_factor=1, curr_iter=epoch
         #     )
-        #     var_y = np.full(
-        #         (batch_size * nb_classes,),
-        #         sigma_v**2,
-        #         dtype=np.float32,
-        #     )
+        var_y = np.full(
+            (batch_size * nb_classes,),
+            sigma_v**2,
+            dtype=np.float32,
+        )
         net.train()
         train_error = 0
         num_train_samples = 0
@@ -278,17 +278,18 @@ def tagi_trainer(
             for i in range(len(labels)):
                 y[i * nb_classes + labels[i]] = 16.5
 
-            out_updater.update_heteros(
+            out_updater.update(
                 output_states=net.output_z_buffer,
                 mu_obs=y,
+                var_obs=var_y,
                 delta_states=net.input_delta_z_buffer,
             )
 
             print("mZ: ", m_pred)
             print("vZ: ", v_pred)
 
-            v_pred = v_pred[::2] + m_pred[1::2]
-            m_pred = m_pred[::2]
+            # v_pred = v_pred[::2] + m_pred[1::2]
+            # m_pred = m_pred[::2]
 
             # print(f"mZ: {m_pred}")
             # print(f"vZ: {v_pred}")
@@ -340,8 +341,8 @@ def tagi_trainer(
             #         test_error_rates.append(0)
                 # print(f"Predicted: {pred} | Actual: {labels[i]}")
 
-            v_pred = v_pred[::2] + m_pred[1::2]
-            m_pred = m_pred[::2]
+            # v_pred = v_pred[::2] + m_pred[1::2]
+            # m_pred = m_pred[::2]
 
             # Calculate test error
             pred = np.reshape(m_pred, (len(labels), 100))
