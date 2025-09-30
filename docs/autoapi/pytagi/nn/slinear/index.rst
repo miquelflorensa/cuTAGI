@@ -22,9 +22,8 @@ Module Contents
 
    Smoother Linear layer for Recurrent Architectures.
 
-   This layer performs a linear transformation ($y = xW^T + b$), specifically designed
-   to be used within LSTMs where a smoothering
-   mechanism might be applied to the hidden states. It wraps the C++/CUDA backend
+   This layer performs a linear transformation (:math:`z = aW^T + b'), specifically designed
+   to be used within LSTMs where a smoothing mechanism might be applied to the hidden states. It wraps the C++/CUDA backend
    `cutagi.SLinear`.
 
 

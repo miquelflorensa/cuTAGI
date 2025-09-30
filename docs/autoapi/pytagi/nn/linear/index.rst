@@ -22,7 +22,7 @@ Module Contents
 
    Implements a **Fully-connected layer**, also known as a dense layer.
    This layer performs a linear transformation on the input data:
-   :math:`y = xW^T + b`, where :math:`x` is the input, :math:`W` is the weight matrix,
+   :math:`z = aW^T + b`, where :math:`a` is the input, :math:`W` is the weight matrix,
    and :math:`b` is the optional bias vector. It inherits from BaseLayer.
 
 

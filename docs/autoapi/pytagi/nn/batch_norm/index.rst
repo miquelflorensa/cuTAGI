@@ -25,7 +25,7 @@ Module Contents
    Batch Normalization is a technique used to normalize the inputs of a layer
    by re-centering and re-scaling them. This helps to stabilize and accelerate
    the training of deep neural networks. This implementation is designed to
-   work with probabilistic inputs (Gaussian distributions).
+   work with Gaussian inputs.
 
    :param num_features: The number of features in the input tensor.
    :type num_features: int

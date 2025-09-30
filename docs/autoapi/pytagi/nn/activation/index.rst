@@ -31,10 +31,12 @@ Module Contents
    Bases: :py:obj:`pytagi.nn.base_layer.BaseLayer`
 
 
-   Applies the Rectified Linear Unit function element-wise.
+   Applies a Rectified Linear Unit function.
 
-   In the context of pyTAGI, which handles distributions, this layer processes an
-   input Gaussian distribution and outputs a rectified Gaussian distribution.
+   This layer processes an input Gaussian distribution and outputs a rectified
+   Gaussian distribution. This activation function relies on a first-order
+   Taylor series approximation that locally linearizes the activation at the input
+   expected value.
 
    .. math::
        \text{ReLU}(x) = (x)^+ = \max(0, x)
@@ -66,11 +68,12 @@ Module Contents
    Bases: :py:obj:`pytagi.nn.base_layer.BaseLayer`
 
 
-   Applies the Sigmoid function element-wise.
+   Applies a Sigmoid function.
 
-   When processing a Gaussian distribution, this layer approximates the
-   output distribution after applying the sigmoid function. The output
-   values are constrained to the range (0, 1).
+   This layer approximates the output distribution after applying the sigmoid
+   function whose output values are constrained to the range (0, 1). This
+   activation function relies on a first-order Taylor series approximation that
+   locally linearizes the activation at the input expected value.
 
    .. math::
        \text{Sigmoid}(x) = \sigma(x) = \frac{1}{1 + e^{-x}}
@@ -102,11 +105,12 @@ Module Contents
    Bases: :py:obj:`pytagi.nn.base_layer.BaseLayer`
 
 
-   Applies the Hyperbolic Tangent function element-wise.
+   Applies the Hyperbolic Tangent function.
 
-   When processing a Gaussian distribution, this layer approximates the
-   output distribution after applying the Tanh function. The output
-   values are constrained to the range (-1, 1).
+   This layer approximates the output distribution after applying the Tanh
+   function whose output values are constrained to the range (-1, 1). This
+   activation function relies on a first-order Taylor series approximation that
+   locally linearizes the activation at the input expected value.
 
    .. math::
        \text{Tanh}(x) = \tanh(x) = \frac{e^x - e^{-x}}{e^x + e^{-x}}
@@ -140,10 +144,10 @@ Module Contents
 
    Applies a probabilistic Rectified Linear Unit approximation.
 
-   This activation function is designed for probabilistic neural networks where
-   activations are represented by distributions. It takes a Gaussian distribution
-   as input and computes the exact moments (mean and variance) of the output,
-   which is a truncated Gaussian distribution.
+   This layer processes an input Gaussian distribution and outputs a rectified
+   Gaussian distribution. This activation function relies on exact moment
+   calculations in order to compute the output moments from a mixture between
+   a probability mass at 0 and a truncated Gaussian distribution.
 
    For an input random variable :math:`X \sim \mathcal{N}(\mu, \sigma^2)`, the output
    :math:`Y = \max(0, X)` results in a rectified Gaussian.
@@ -175,11 +179,14 @@ Module Contents
    Bases: :py:obj:`pytagi.nn.base_layer.BaseLayer`
 
 
-   Applies a probabilistic Sigmoid function approximation.
+   Applies a probabilistic piece-wise linear Sigmoid function approximation.
 
    This activation function processes an input Gaussian distribution and
-   approximates the output distribution after applying the sigmoid function.
-   The resulting distribution is confined to the range (0, 1).
+   approximates the output distribution after applying a piecewise linear
+   sigmoid function whose resulting distribution is in the range (0, 1).
+   This activation function relies on exact moment calculations in order
+   to compute the output moments from a mixture between a probability masses
+   and a truncated Gaussian distribution.
 
    For an input random variable :math:`X \sim \mathcal{N}(\mu, \sigma^2)`, this layer
    approximates the distribution of :math:`Y = \frac{1}{1 + e^{-X}}`.
@@ -211,11 +218,14 @@ Module Contents
    Bases: :py:obj:`pytagi.nn.base_layer.BaseLayer`
 
 
-   Applies a probabilistic Hyperbolic Tangent function approximation.
+   Applies a probabilistic piecewise-linear Hyperbolic Tangent function approximation.
 
    This activation function processes an input Gaussian distribution and
-   approximates the output distribution after applying the Tanh function.
-   The resulting distribution is confined to the range (-1, 1).
+   approximates the output distribution after applying a piecewise linear
+   Tanh function whose resulting distribution is in the range (-1, 1).
+   This activation function relies on exact moment calculations in order
+   to compute the output moments from a mixture between a probability masses
+   and a truncated Gaussian distribution.
 
    For an input random variable :math:`X \sim \mathcal{N}(\mu, \sigma^2)`, this layer
    approximates the distribution of :math:`Y = \tanh(X)`.
@@ -247,9 +257,11 @@ Module Contents
    Bases: :py:obj:`pytagi.nn.base_layer.BaseLayer`
 
 
-   Applies the Softplus function element-wise.
+   Applies the Softplus function.
 
-   Softplus is a smooth approximation of the ReLU function.
+   Softplus is a smooth approximation of the ReLU function. This
+   activation function relies on a first-order Taylor series approximation that
+   locally linearizes the activation at the input expected value.
 
    .. math::
        \text{Softplus}(x) = \log(1 + e^{x})
@@ -281,10 +293,12 @@ Module Contents
    Bases: :py:obj:`pytagi.nn.base_layer.BaseLayer`
 
 
-   Applies the Leaky Rectified Linear Unit function element-wise.
+   Applies the Leaky Rectified Linear Unit function.
 
    This is a variant of ReLU that allows a small, non-zero gradient
-   when the unit is not active, which can help mitigate the "dying ReLU" problem.
+   when the unit is not active. This activation function relies on a
+   first-order Taylor series approximation that locally linearizes the activation
+   at the input expected value.
 
    .. math::
        \text{LeakyReLU}(x) =
@@ -358,9 +372,9 @@ Module Contents
 
    Applies the EvenExp activation function.
 
-   This is an even function allows to pass just the odd postions of the output layer through
-   an exponential activation function. So it allows passing from V2_bar to V2_bar_tilde for
-   the correct aleatoric uncertainty inference in the case of heteroscedastic regression.
+   This is function allows passing only the odd postions of the output layer through
+   an exponential activation function. It is used for passing from V2_bar to
+   V2_bar_tilde for the aleatoric uncertainty inference in the case of heteroscedastic regression.
 
    .. math::
        \text{EvenExp}(x) = \begin{cases}
@@ -393,13 +407,13 @@ Module Contents
    Bases: :py:obj:`pytagi.nn.base_layer.BaseLayer`
 
 
-   Applies a probabilistic Remax approximation function.
+   Applies a probabilistic Remax function.
 
-   Remax is a softmax-like activation function wich replaces the exponential function by a
-   rectified linear unit. It rescales the input so that the elements of the output
-   lie in the range [0,1] and sum to 1. It is commonly used as the final
-   activation function in a classification network to produce probability
-   distributions over classes.
+   Remax is a probabilistic softmax-like activation function wich replaces the
+   exponential function by a mixture rectified linear unit. It rescales the
+   input so that the elements of the output are in the range [0,1] and sum to 1.
+   It is commonly used as the final activation function in a classification
+   network to produce probability distributions over classes.
 
    .. math::
        \text{Remax}(x_{i}) = \frac{\text{ReLU}(x_i)}{\sum_j \text{ReLU}(x_j)}
@@ -428,12 +442,13 @@ Module Contents
    Bases: :py:obj:`pytagi.nn.base_layer.BaseLayer`
 
 
-   Applies a probabilistic Softmax approximation function.
+   Applies a probabilistic Softmax function.
 
-   Closed-form softmax is an approximation of the softmax function that provides
-   a closed-form solution for the output distribution when the input is a Gaussian
-   distribution. It is commonly used as the final activation function in a classification
-   network to produce probability distributions over classes.
+   Closed-form softmax is a probabilistic approximation of the deterministic softmax function
+   that provides a closed-form solution for the output distribution when the input
+   is a Gaussian distribution. It is commonly used as the final activation
+   function in a classificationnetwork to produce probability distributions over
+   classes.
 
    .. math::
        \text{Softmax}(x_{i}) = \frac{\exp(x_i)}{\sum_j \exp(x_j)}

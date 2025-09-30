@@ -164,28 +164,32 @@ Module Contents
       :type: numpy.ndarray
 
 
-      Gets the delta mean of the weights (delta_mu_w) as a NumPy array.
+      Gets the change (delta) as a NumPy array, in the mean of the weights
+      (delta_mu_w) resulting from the update step.
 
 
    .. py:property:: delta_var_w
       :type: numpy.ndarray
 
 
-      Gets the delta variance of the weights (delta_var_w) as a NumPy array.
+      Gets the change (delta) as a NumPy array, in the variance of the weights
+      (delta_var_w) resulting from the update step.
 
 
    .. py:property:: delta_mu_b
       :type: numpy.ndarray
 
 
-      Gets the delta mean of the biases (delta_mu_b) as a NumPy array.
+      Gets the change (delta) as a NumPy array, in the mean of the biases
+      (delta_mu_b) resulting from the update step.
 
 
    .. py:property:: delta_var_b
       :type: numpy.ndarray
 
 
-      Gets the delta variance of the biases (delta_var_b) as a NumPy array.
+      Gets the change (delta) as a NumPy array, in the variance of the biases
+      (delta_var_b) resulting from the update step.
 
 
    .. py:property:: num_threads

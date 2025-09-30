@@ -242,7 +242,8 @@ Module Contents
 
    .. py:method:: get_neg_var_w_counter() -> dict
 
-      Counts the number of negative variance weights in each layer.
+      Counts the number of negative variance weights in each layer. This counter
+      is used for debugging purpose.
 
       :return: A dictionary where keys are layer names and values are the counts
                of negative variances.

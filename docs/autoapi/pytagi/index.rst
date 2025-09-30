@@ -90,7 +90,6 @@ Package Contents
 
    Hierarchical softmax wrapper from the CPP backend.
 
-   Further details can be found here: https://building-babylon.net/2017/08/01/hierarchical-softmax
 
    .. attribute:: obs
 

@@ -20,12 +20,12 @@ Module Contents
    Bases: :py:obj:`pytagi.nn.base_layer.BaseLayer`
 
 
-   A stack of different layer derived from BaseLayer
+   A stack of different layers derived from BaseLayer
 
 
    .. py:method:: switch_to_cuda()
 
-      Convert all layers to cuda layer
+      Convert all layers to cuda layers
 
 
 
