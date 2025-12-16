@@ -16,11 +16,17 @@ dist
 data/cifar
 data/mnist/
 data/MNIST/
+data/stanford_cars/
+data/cifar100
+data/svhn
+data/food101
 data/traffic
 data/imagenet
 test_model/
 wandb/
 saved_results/param_viz
+
+checkpoints/
 
 # VSCode
 .vscode

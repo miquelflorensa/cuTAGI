@@ -1,8 +1,8 @@
-# Temporary import. It will be removed in the final vserion
+# CIFAR-100 Training Script with PyTAGI ResNet-18
 import os
 import sys
 
-# Add the 'build' directory to sys.path in one line
+# Add the 'build' directory to sys.path
 sys.path.append(
     os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "build"))
 )
@@ -14,11 +14,10 @@ import torchvision
 import torchvision.transforms.v2 as transforms
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-import shutil  # Added for cleaning up checkpoints
-from pathlib import Path  # Added for cleaner path management
+from pathlib import Path
 
 import pytagi
-from examples.tagi_resnet_model import resnet18_cifar10
+from examples.tagi_resnet_model import resnet18_cifar100
 from pytagi.nn import (
     AvgPool2d,
     BatchNorm2d,
@@ -34,37 +33,20 @@ from pytagi.nn import (
 
 torch.manual_seed(17)
 
-# Constants for dataset normalization
-NORMALIZATION_MEAN = [0.4914, 0.4822, 0.4465]
-NORMALIZATION_STD = [0.2470, 0.2435, 0.2616]
+# Constants for dataset normalization (CIFAR-100 uses same normalization as CIFAR-10)
+NORMALIZATION_MEAN = [0.5071, 0.4867, 0.4408]
+NORMALIZATION_STD = [0.2675, 0.2565, 0.2761]
+
+NUM_CLASSES = 100
 
 
-CNN_NET = Sequential(
-    Conv2d(3, 32, 5, bias=False, padding=2, in_width=32, in_height=32),
-    MixtureReLU(),
-    BatchNorm2d(32),
-    AvgPool2d(3, 2, padding=1, padding_type=2),
-    MixtureReLU(),
-    BatchNorm2d(32),
-    AvgPool2d(3, 2, padding=1, padding_type=2),
-    Conv2d(32, 64, 5, bias=False, padding=2),
-    MixtureReLU(),
-    BatchNorm2d(64),
-    AvgPool2d(3, 2, padding=1, padding_type=2),
-    Linear(64 * 4 * 4, 256),
-    MixtureReLU(),
-    Linear(256, 10, gain_weight=0.25, gain_bias=0.25),
-    Remax(),
-)
-
-
-def one_hot_encode(labels, num_classes=10):
+def one_hot_encode(labels, num_classes=NUM_CLASSES):
     """Convert labels to one-hot encoding"""
     labels = labels.clone().detach()
 
     labels = F.one_hot(labels, num_classes=num_classes).numpy().flatten()
 
-    # Convert to -0.5 / 16.5
+    # Convert to -0.5 / 16.5 (same as CIFAR-10 training)
     labels = labels * 17 - 0.5
 
     return labels
@@ -88,7 +70,7 @@ def custom_collate_fn(batch):
 
 
 def load_datasets(batch_size: int):
-    """Load and transform CIFAR10 training and test datasets."""
+    """Load and transform CIFAR-100 training and test datasets."""
     transform_train = transforms.Compose(
         [
             transforms.RandomCrop(32, padding=4),
@@ -111,14 +93,14 @@ def load_datasets(batch_size: int):
         ]
     )
 
-    train_set = torchvision.datasets.CIFAR10(
-        root="./data/cifar",
+    train_set = torchvision.datasets.CIFAR100(
+        root="./data/cifar100",
         train=True,
         download=True,
         transform=transform_train,
     )
-    test_set = torchvision.datasets.CIFAR10(
-        root="./data/cifar",
+    test_set = torchvision.datasets.CIFAR100(
+        root="./data/cifar100",
         train=False,
         download=True,
         transform=transform_test,
@@ -142,6 +124,7 @@ def load_datasets(batch_size: int):
     )
     return train_loader, test_loader
 
+
 def print_statistics(m_pred, v_pred):
     print("============================================")
     print("LOGITS STATISTICS")
@@ -157,24 +140,33 @@ def print_statistics(m_pred, v_pred):
     print("max: ", np.max(m_pred[1::2]))
     print("min: ", np.min(m_pred[1::2]))
     print("============================================")
-    
-    
+
 
 def main(num_epochs: int = 100, batch_size: int = 128, sigma_v: float = 0.05):
     """
-    Run classification training on the CIFAR-10 dataset using PyTAGI.
+    Run classification training on the CIFAR-100 dataset using PyTAGI.
+    
+    Args:
+        num_epochs: Number of training epochs
+        batch_size: Batch size for training
+        sigma_v: Observation noise standard deviation
     """
     train_loader, test_loader = load_datasets(batch_size)
 
-    # Initialize network
-    # net = CNN_NET
-    net = resnet18_cifar10(is_remax=False, gain_w=0.083, gain_b=0.083)
+    # Initialize network (ResNet-18 for CIFAR-100)
+    net = resnet18_cifar100(is_remax=False, gain_w=0.083, gain_b=0.083)
     net.to_device("cuda" if pytagi.cuda.is_available() else "cpu")
 
     out_updater = OutputUpdater(net.device)
 
     # Training loop
-    var_y = np.full((batch_size * 10,), sigma_v**2, dtype=np.float32)
+    var_y = np.full((batch_size * NUM_CLASSES,), sigma_v**2, dtype=np.float32)
+
+    # Create checkpoint directory
+    checkpoint_dir = Path("checkpoints/cifar100/")
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+
+    best_test_error = float('inf')
 
     for epoch in range(num_epochs):
         net.train()
@@ -182,13 +174,15 @@ def main(num_epochs: int = 100, batch_size: int = 128, sigma_v: float = 0.05):
         num_train_samples = 0
 
         pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs}")
-        for _, (data, target) in enumerate(pbar):
+        for batch_idx, (data, target) in enumerate(pbar):
             # Feedforward and backward pass
             m_pred, v_pred = net(data)
 
-            print_statistics(m_pred, v_pred)
+            # Print statistics only for first batch of each epoch
+            if batch_idx == 0 and epoch % 10 == 0:
+                print_statistics(m_pred, v_pred)
 
-            m_pred = m_pred[::2]
+            m_pred_epistemic = m_pred[::2]
 
             # Convert labels to one-hot encoding
             y = one_hot_encode(target)
@@ -197,7 +191,6 @@ def main(num_epochs: int = 100, batch_size: int = 128, sigma_v: float = 0.05):
             out_updater.update_heteros(
                 output_states=net.output_z_buffer,
                 mu_obs=y,
-                # var_obs=var_y,
                 delta_states=net.input_delta_z_buffer,
             )
 
@@ -206,14 +199,14 @@ def main(num_epochs: int = 100, batch_size: int = 128, sigma_v: float = 0.05):
             net.step()
 
             # Calculate error rate
-            pred = np.reshape(m_pred, (batch_size, 10))
+            pred = np.reshape(m_pred_epistemic, (batch_size, NUM_CLASSES))
             label = np.argmax(pred, axis=1)
             train_error += np.sum(label != target.numpy())
             num_train_samples += len(target)
 
             # Update progress bar
             pbar.set_postfix(
-                {"train_error": f"{train_error/num_train_samples:.2f}%"}
+                {"train_error": f"{train_error/num_train_samples * 100:.2f}%"}
             )
 
         # Testing
@@ -223,29 +216,38 @@ def main(num_epochs: int = 100, batch_size: int = 128, sigma_v: float = 0.05):
 
         for data, target in test_loader:
             m_pred, v_pred = net(data)
-            print_statistics(m_pred, v_pred)
-            v_pred = m_pred[1::2] + v_pred[::2]
-            m_pred = m_pred[::2]
+            v_total = m_pred[1::2] + v_pred[::2]
+            m_pred_epistemic = m_pred[::2]
 
             # Calculate test error
-            pred = np.reshape(m_pred, (batch_size, 10))
+            pred = np.reshape(m_pred_epistemic, (batch_size, NUM_CLASSES))
             label = np.argmax(pred, axis=1)
             test_error += np.sum(label != target.numpy())
             num_test_samples += len(target)
 
         test_error_rate = (test_error / num_test_samples) * 100
+        train_error_rate = (train_error / num_train_samples) * 100
+        
         print(
             f"\nEpoch {epoch+1}/{num_epochs}: "
-            f"Train Error: {train_error/num_train_samples * 100:.2f}% | "
+            f"Train Error: {train_error_rate:.2f}% | "
             f"Test Error: {test_error_rate:.2f}%"
         )
 
-        # --- Setup Checkpoint Path ---
-        # Each seed gets its own directory
-        run_checkpoint_dir = "checkpoints/"
-        model_path = run_checkpoint_dir + "model" + str(epoch) + ".bin"
-    
-        net.save(model_path)
+        # Save checkpoint every 10 epochs
+        if (epoch + 1) % 10 == 0:
+            model_path = checkpoint_dir / f"model_epoch{epoch+1}.bin"
+            net.save(str(model_path))
+            print(f"Saved checkpoint: {model_path}")
+
+        # Save best model
+        if test_error_rate < best_test_error:
+            best_test_error = test_error_rate
+            best_model_path = checkpoint_dir / "best_model.bin"
+            net.save(str(best_model_path))
+            print(f"New best model saved with test error: {test_error_rate:.2f}%")
+
+    print(f"\nTraining complete! Best test error: {best_test_error:.2f}%")
 
 
 if __name__ == "__main__":
