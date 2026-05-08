@@ -12,6 +12,9 @@ __global__ void update_delta_z_using_indices_cuda(
     float tmp = 0.0f;
     int idx;
     if (col < size) {
+        if (selected_idx[col] <= 0) {
+            return;
+        }
         // minus 1 because the encoder index starts at 1
         idx = selected_idx[col] + (col / n_enc) * n_obs - 1;
         tmp = jcb[idx] / (var_a[idx] + var_obs[col]);

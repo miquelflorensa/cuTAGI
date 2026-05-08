@@ -248,9 +248,20 @@ class HRCSoftmax:
         self._cpp_backend.idx = value
 
     @property
+    def path_len(self) -> List[int]:
+        """
+        Gets or sets the number of real path entries assigned to each label.
+        """
+        return self._cpp_backend.path_len
+
+    @path_len.setter
+    def path_len(self, value: List[int]):
+        self._cpp_backend.path_len = value
+
+    @property
     def num_obs(self) -> int:
         """
-        Gets or sets the number of indices for each label.
+        Gets or sets the maximum number of indices for each label.
         """
         return self._cpp_backend.num_obs
 

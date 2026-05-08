@@ -54,6 +54,7 @@ void bind_hrcsoftmax(pybind11::module_ &modo)
         .def(pybind11::init<>())
         .def_readwrite("obs", &HRCSoftmax::obs)
         .def_readwrite("idx", &HRCSoftmax::idx)
+        .def_readwrite("path_len", &HRCSoftmax::path_len)
         .def_readwrite("num_obs", &HRCSoftmax::n_obs)
         .def_readwrite("len", &HRCSoftmax::len);
 }

@@ -2,6 +2,45 @@
 
 #include "../include/custom_logger.h"
 
+namespace {
+
+void assign_hrc_paths(int start_class, int end_class, int node_idx,
+                      int &next_node_idx, std::vector<std::vector<float>> &obs,
+                      std::vector<std::vector<int>> &idx) {
+    const int num_classes = end_class - start_class;
+    if (num_classes <= 1) {
+        return;
+    }
+
+    const int left_size = (num_classes + 1) / 2;
+    const int split_class = start_class + left_size;
+
+    for (int label = start_class; label < split_class; label++) {
+        obs[label].push_back(1.0f);
+        idx[label].push_back(node_idx);
+    }
+    for (int label = split_class; label < end_class; label++) {
+        obs[label].push_back(-1.0f);
+        idx[label].push_back(node_idx);
+    }
+
+    if (left_size > 1) {
+        const int child_node_idx = next_node_idx;
+        next_node_idx++;
+        assign_hrc_paths(start_class, split_class, child_node_idx,
+                         next_node_idx, obs, idx);
+    }
+    const int right_size = end_class - split_class;
+    if (right_size > 1) {
+        const int child_node_idx = next_node_idx;
+        next_node_idx++;
+        assign_hrc_paths(split_class, end_class, child_node_idx, next_node_idx,
+                         obs, idx);
+    }
+}
+
+}  // namespace
+
 void fliplr(std::vector<int> &v)
 /* Flip an array from left to right
  *
@@ -75,7 +114,11 @@ int bi_to_dec(std::vector<int> &v, int base)
 
 HRCSoftmax class_to_obs(int n_classes)
 /*
- * Convert class to hierachical softmax for classificaiton task.
+ * Convert class to hierarchical softmax for classification task.
+ *
+ * The tree has exactly one leaf per class and n_classes - 1 internal decision
+ * nodes. Class paths can have different lengths, so obs/idx are padded to the
+ * maximum path length with idx = 0. Updaters skip padded entries.
  *
  * Args:
  *    n_classes: Number of classes.
@@ -83,59 +126,38 @@ HRCSoftmax class_to_obs(int n_classes)
  * Returns:
  *    obs: Observation matrix for each class i.e. -1 and 1
  *    idx: Indices for each observation
- *    n_obs: Number of observation
- *    len: Length of the observation vector
+ *    path_len: Number of real observations for each class
+ *    n_obs: Maximum number of observations
+ *    len: Number of internal decision nodes
  **/
 {
-    int base = 2, L;
-    float tmp;
+    if (n_classes < 2) {
+        return {{}, {}, {}, 0, 0};
+    }
 
-    // Compute the length of binary vector
-    L = std::ceil(std::log2(n_classes));
+    std::vector<std::vector<float>> obs_by_class(n_classes);
+    std::vector<std::vector<int>> idx_by_class(n_classes);
+    int next_node_idx = 2;
+    assign_hrc_paths(0, n_classes, 1, next_node_idx, obs_by_class,
+                     idx_by_class);
 
-    // Get observations including -1 and 1
-    std::vector<int> C(L * n_classes);
-    std::vector<float> obs(L * n_classes);
-    for (int r = 0; r < n_classes; r++) {
-        std::vector<int> tmp = dec_to_bi(base, r, L);
-        for (int c = 0; c < L; c++) {
-            C[r * L + c] = tmp[c];
-            obs[r * L + c] = pow(-1.0f, tmp[c]);
+    int max_path_len = 0;
+    std::vector<int> path_len(n_classes, 0);
+    for (int label = 0; label < n_classes; label++) {
+        path_len[label] = idx_by_class[label].size();
+        max_path_len = std::max(max_path_len, path_len[label]);
+    }
+
+    std::vector<float> obs(n_classes * max_path_len, 0.0f);
+    std::vector<int> idx(n_classes * max_path_len, 0);
+    for (int label = 0; label < n_classes; label++) {
+        for (int col = 0; col < path_len[label]; col++) {
+            obs[label * max_path_len + col] = obs_by_class[label][col];
+            idx[label * max_path_len + col] = idx_by_class[label][col];
         }
     }
 
-    // Compute C_sum
-    std::vector<int> idx(L * n_classes, 1);
-    std::vector<int> C_sum(L + 1, 0);
-    C_sum[L] = n_classes;
-    for (int l = L - 1; l >= 0; l--) {
-        tmp = std::ceil(C_sum[l + 1] / 2.0f);
-        C_sum[l] = tmp;
-    }
-
-    // Compute cumulative sum for C_sum
-    for (int l = 1; l < L + 1; l++) {
-        C_sum[l] = C_sum[l - 1] + C_sum[l];
-    }
-    for (int l = 0; l < L + 1; l++) {
-        C_sum[l] = C_sum[l] + 1;
-    }
-
-    // Get indices for observations
-    for (int r = 0; r < n_classes; r++) {
-        for (int c = 0; c < L - 1; c++) {
-            std::vector<int> tmp(c + 1);
-            for (int t = 0; t < c + 1; t++) {
-                tmp[t] = C[r * L + t];
-            }
-            idx[r * L + c + 1] = bi_to_dec(tmp, base) + C_sum[c];
-        }
-    }
-
-    // Compute the length of the observation vector
-    int len = *std::max_element(idx.begin(), idx.end());
-
-    return {obs, idx, L, len};
+    return {obs, idx, path_len, max_path_len, n_classes - 1};
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -165,7 +187,6 @@ std::vector<float> obs_to_class(std::vector<float> &mz, std::vector<float> &Sz,
     // Initialization
     std::vector<float> P(n_classes);
     std::vector<float> P_z(hs.len);
-    std::vector<float> P_obs(hs.n_obs * n_classes);
     float alpha = 3;
 
     // Compute probability for each observation
@@ -176,11 +197,18 @@ std::vector<float> obs_to_class(std::vector<float> &mz, std::vector<float> &Sz,
     // Compute probability for the class
     for (int r = 0; r < n_classes; r++) {
         float tmp = 1.0f;
-        for (int c = 0; c < hs.n_obs; c++) {
-            if (hs.obs[r * hs.n_obs + c] == -1.0f) {
-                tmp *= std::abs(P_z[hs.idx[r * hs.n_obs + c] - 1] - 1.0f);
+        const int path_len =
+            hs.path_len.empty() ? hs.n_obs : hs.path_len[r];
+        for (int c = 0; c < path_len; c++) {
+            const int flat_idx = r * hs.n_obs + c;
+            const int node_idx = hs.idx[flat_idx];
+            if (node_idx <= 0) {
+                continue;
+            }
+            if (hs.obs[flat_idx] == -1.0f) {
+                tmp *= std::abs(P_z[node_idx - 1] - 1.0f);
             } else {
-                tmp *= P_z[hs.idx[r * hs.n_obs + c] - 1];
+                tmp *= P_z[node_idx - 1];
             }
         }
         P[r] = tmp;

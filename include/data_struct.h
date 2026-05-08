@@ -268,10 +268,12 @@ struct HRCSoftmax {
        Args:
         obs: A fictive observation \in [-1, 1]
         idx: Indices assigned to each label
-        n_obs: Number of indices for each label
-        len: Length of an observation e.g 10 labels -> len(obs) = 11
+        path_len: Number of real indices for each label
+        n_obs: Maximum number of indices for each label
+        len: Number of internal binary-decision nodes
     */
     std::vector<float> obs;
     std::vector<int> idx;
+    std::vector<int> path_len;
     int n_obs, len;
 };

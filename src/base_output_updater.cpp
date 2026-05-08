@@ -79,6 +79,9 @@ binary tree for classification task.
     float tmp = 0.0f;
     int idx = 0;
     for (int col = start_chunk; col < end_chunk; col++) {
+        if (selected_idx[col] <= 0) {
+            continue;
+        }
         // minus 1 because the encoding index start at 1
         idx = selected_idx[col] + (col / n_enc) * n_obs - 1;
         tmp = jcb[idx] / (var_a[idx] + var_obs[col]);
