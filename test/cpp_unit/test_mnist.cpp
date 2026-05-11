@@ -15,6 +15,7 @@
 #include "../../include/base_output_updater.h"
 #include "../../include/batchnorm_layer.h"
 #include "../../include/conv2d_layer.h"
+#include "../../include/cost.h"
 #include "../../include/convtranspose2d_layer.h"
 #include "../../include/cuda_utils.h"
 #include "../../include/data_struct.h"
@@ -26,6 +27,10 @@
 #include "../../include/sequential.h"
 
 extern bool g_gpu_enabled;
+
+static int hrc_output_size(int num_classes = 10) {
+    return class_to_obs(num_classes).len;
+}
 
 void mnist_test_runner(Sequential &model, float &avg_error_output) {
     //////////////////////////////////////////////////////////////////////
@@ -50,7 +55,7 @@ void mnist_test_runner(Sequential &model, float &avg_error_output) {
     int height = 28;
     int channel = 1;
     int n_x = width * height;
-    int n_y = 11;
+    int n_y = hrc_output_size(num_classes);
 
     auto train_db = get_images_v2(data_name, x_train_paths, y_train_paths, mu,
                                   sigma, num_train_data, num_classes, width,
@@ -388,7 +393,7 @@ TEST_F(MnistTest, BatchnormWithoutBiases_CPU) {
                      BatchNorm2d(8, 1e-5, 0, false), ReLU(), AvgPool2d(3, 2),
                      Conv2d(8, 8, 5, false), BatchNorm2d(8, 1e-5, 0, false),
                      ReLU(), AvgPool2d(3, 2), Linear(8 * 4 * 4, 32), ReLU(),
-                     Linear(32, 11));
+                     Linear(32, hrc_output_size()));
     model.set_threads(4);
 
     float avg_error;
@@ -399,7 +404,7 @@ TEST_F(MnistTest, BatchnormWithoutBiases_CPU) {
 
 TEST_F(MnistTest, FNNModelTest_CPU) {
     Sequential model(Linear(784, 32), ReLU(), Linear(32, 32), ReLU(),
-                     Linear(32, 11));
+                     Linear(32, hrc_output_size()));
     float avg_error;
     float threshold = 0.5;  // Heuristic threshold
     mnist_test_runner(model, avg_error);
@@ -417,7 +422,7 @@ TEST_F(MnistTest, RemaxTest_CPU) {
 
 TEST_F(MnistTest, MixtureReLUModelTest_CPU) {
     Sequential model(Linear(784, 32), MixtureReLU(), Linear(32, 32),
-                     MixtureReLU(), Linear(32, 11));
+                     MixtureReLU(), Linear(32, hrc_output_size()));
     float avg_error;
     float threshold = 0.5;
     mnist_test_runner(model, avg_error);
@@ -426,7 +431,7 @@ TEST_F(MnistTest, MixtureReLUModelTest_CPU) {
 
 TEST_F(MnistTest, BatchNormFNNTest_CPU) {
     Sequential model(Linear(784, 32), BatchNorm2d(32), ReLU(), Linear(32, 32),
-                     BatchNorm2d(32), ReLU(), Linear(32, 11));
+                     BatchNorm2d(32), ReLU(), Linear(32, hrc_output_size()));
     float avg_error;
     float threshold = 0.5;
     mnist_test_runner(model, avg_error);
@@ -436,7 +441,7 @@ TEST_F(MnistTest, BatchNormFNNTest_CPU) {
 TEST_F(MnistTest, LayerNormFNNTest_CPU) {
     Sequential model(Linear(784, 32), LayerNorm(std::vector<int>({32})), ReLU(),
                      Linear(32, 32), LayerNorm(std::vector<int>({32})), ReLU(),
-                     Linear(32, 11));
+                     Linear(32, hrc_output_size()));
     float avg_error;
     float threshold = 0.5;
     mnist_test_runner(model, avg_error);
@@ -446,7 +451,7 @@ TEST_F(MnistTest, LayerNormFNNTest_CPU) {
 TEST_F(MnistTest, CNNTest_CPU) {
     Sequential model(Conv2d(1, 8, 4, true, 1, 1, 1, 28, 28), ReLU(),
                      AvgPool2d(3, 2), Conv2d(8, 8, 5), ReLU(), AvgPool2d(3, 2),
-                     Linear(8 * 4 * 4, 32), ReLU(), Linear(32, 11));
+                     Linear(8 * 4 * 4, 32), ReLU(), Linear(32, hrc_output_size()));
     model.set_threads(4);
 
     float avg_error;
@@ -458,7 +463,7 @@ TEST_F(MnistTest, CNNTest_CPU) {
 TEST_F(MnistTest, MaxPoolingTest_CPU) {
     Sequential model(Conv2d(1, 8, 4, true, 1, 1, 1, 28, 28), ReLU(),
                      MaxPool2d(3, 2), Conv2d(8, 8, 5), ReLU(), MaxPool2d(3, 2),
-                     Linear(8 * 4 * 4, 32), ReLU(), Linear(32, 11));
+                     Linear(8 * 4 * 4, 32), ReLU(), Linear(32, hrc_output_size()));
     model.set_threads(4);
 
     float avg_error;
@@ -471,7 +476,7 @@ TEST_F(MnistTest, BatchNormCNNTest_CPU) {
     Sequential model(Conv2d(1, 8, 4, false, 1, 1, 1, 28, 28), BatchNorm2d(8),
                      ReLU(), AvgPool2d(3, 2), Conv2d(8, 8, 5, false),
                      BatchNorm2d(8), ReLU(), AvgPool2d(3, 2),
-                     Linear(8 * 4 * 4, 32), ReLU(), Linear(32, 11));
+                     Linear(8 * 4 * 4, 32), ReLU(), Linear(32, hrc_output_size()));
     model.set_threads(4);
 
     float avg_error;
@@ -485,7 +490,7 @@ TEST_F(MnistTest, LayerNormCNNTest_CPU) {
         Conv2d(1, 8, 4, false, 1, 1, 1, 28, 28),
         LayerNorm(std::vector<int>({8, 27, 27})), ReLU(), AvgPool2d(3, 2),
         Conv2d(8, 8, 5, false), LayerNorm(std::vector<int>({8, 9, 9})), ReLU(),
-        AvgPool2d(3, 2), Linear(8 * 4 * 4, 32), ReLU(), Linear(32, 11));
+        AvgPool2d(3, 2), Linear(8 * 4 * 4, 32), ReLU(), Linear(32, hrc_output_size()));
     model.set_threads(2);
     float avg_error;
     float threshold = 0.5;
@@ -495,7 +500,7 @@ TEST_F(MnistTest, LayerNormCNNTest_CPU) {
 
 // TEST_F(MnistTest, MismatchSizeDetection) {
 //     Sequential model(Linear(784, 32), ReLU(), Linear(300, 32), ReLU(),
-//                      Linear(32, 11));
+//                      Linear(32, hrc_output_size()));
 //     float avg_error;
 //     float threshold = 0.5;
 //     EXPECT_THROW({ mnist_test_runner(model, avg_error); },
@@ -519,7 +524,7 @@ TEST_F(MnistTest, BatchnormWithoutBiases_CUDA) {
                      BatchNorm2d(8, 1e-5, 0, false), ReLU(), AvgPool2d(3, 2),
                      Conv2d(8, 8, 5, false), BatchNorm2d(8, 1e-5, 0, false),
                      ReLU(), AvgPool2d(3, 2), Linear(8 * 4 * 4, 32), ReLU(),
-                     Linear(32, 11));
+                     Linear(32, hrc_output_size()));
     model.to_device("cuda");
 
     float avg_error;
@@ -535,7 +540,7 @@ TEST_F(MnistTest, LayernormWithoutBiases_CUDA) {
                      ReLU(), AvgPool2d(3, 2), Conv2d(8, 8, 5, false),
                      LayerNorm(std::vector<int>({8, 9, 9}), 1e-5, false),
                      ReLU(), AvgPool2d(3, 2), Linear(8 * 4 * 4, 32), ReLU(),
-                     Linear(32, 11));
+                     Linear(32, hrc_output_size()));
     model.to_device("cuda");
 
     float avg_error;
@@ -547,7 +552,7 @@ TEST_F(MnistTest, LayernormWithoutBiases_CUDA) {
 TEST_F(MnistTest, FNNModelTest_CUDA) {
     if (!g_gpu_enabled) GTEST_SKIP() << "GPU tests are disabled.";
     Sequential model(Linear(784, 32), ReLU(), Linear(32, 32), ReLU(),
-                     Linear(32, 11));
+                     Linear(32, hrc_output_size()));
     model.to_device("cuda");
 
     float avg_error;
@@ -559,7 +564,7 @@ TEST_F(MnistTest, FNNModelTest_CUDA) {
 TEST_F(MnistTest, MixtureReLUModelTest_CUDA) {
     if (!g_gpu_enabled) GTEST_SKIP() << "GPU tests are disabled.";
     Sequential model(Linear(784, 32), MixtureReLU(), Linear(32, 32),
-                     MixtureReLU(), Linear(32, 11));
+                     MixtureReLU(), Linear(32, hrc_output_size()));
     model.to_device("cuda");
 
     float avg_error;
@@ -571,7 +576,7 @@ TEST_F(MnistTest, MixtureReLUModelTest_CUDA) {
 TEST_F(MnistTest, BatchNormFNNTest_CUDA) {
     if (!g_gpu_enabled) GTEST_SKIP() << "GPU tests are disabled.";
     Sequential model(Linear(784, 32), BatchNorm2d(32), ReLU(), Linear(32, 32),
-                     BatchNorm2d(1024), ReLU(), Linear(32, 11));
+                     BatchNorm2d(1024), ReLU(), Linear(32, hrc_output_size()));
     model.to_device("cuda");
 
     float avg_error;
@@ -584,7 +589,7 @@ TEST_F(MnistTest, LayerNormFNNTest_CUDA) {
     if (!g_gpu_enabled) GTEST_SKIP() << "GPU tests are disabled.";
     Sequential model(Linear(784, 32), LayerNorm(std::vector<int>({32})), ReLU(),
                      Linear(32, 32), LayerNorm(std::vector<int>({32})), ReLU(),
-                     Linear(32, 11));
+                     Linear(32, hrc_output_size()));
     model.to_device("cuda");
 
     float avg_error;
@@ -597,7 +602,7 @@ TEST_F(MnistTest, CNNTest_CUDA) {
     if (!g_gpu_enabled) GTEST_SKIP() << "GPU tests are disabled.";
     Sequential model(Conv2d(1, 8, 4, true, 1, 1, 1, 28, 28), ReLU(),
                      AvgPool2d(3, 2), Conv2d(8, 8, 5), ReLU(), AvgPool2d(3, 2),
-                     Linear(8 * 4 * 4, 32), ReLU(), Linear(32, 11));
+                     Linear(8 * 4 * 4, 32), ReLU(), Linear(32, hrc_output_size()));
     model.to_device("cuda");
 
     float avg_error;
@@ -610,7 +615,7 @@ TEST_F(MnistTest, MaxPoolingTest_CUDA) {
     if (!g_gpu_enabled) GTEST_SKIP() << "GPU tests are disabled.";
     Sequential model(Conv2d(1, 8, 4, true, 1, 1, 1, 28, 28), ReLU(),
                      MaxPool2d(3, 2), Conv2d(8, 8, 5), ReLU(), MaxPool2d(3, 2),
-                     Linear(8 * 4 * 4, 32), ReLU(), Linear(32, 11));
+                     Linear(8 * 4 * 4, 32), ReLU(), Linear(32, hrc_output_size()));
     model.to_device("cuda");
 
     float avg_error;
@@ -624,7 +629,7 @@ TEST_F(MnistTest, BatchNormCNNTest_CUDA) {
     Sequential model(Conv2d(1, 8, 4, false, 1, 1, 1, 28, 28), BatchNorm2d(8),
                      ReLU(), AvgPool2d(3, 2), Conv2d(8, 8, 5, false),
                      BatchNorm2d(8), ReLU(), AvgPool2d(3, 2),
-                     Linear(8 * 4 * 4, 32), ReLU(), Linear(32, 11));
+                     Linear(8 * 4 * 4, 32), ReLU(), Linear(32, hrc_output_size()));
     model.to_device("cuda");
 
     float avg_error;
@@ -639,7 +644,7 @@ TEST_F(MnistTest, LayerNormCNNTest_CUDA) {
         Conv2d(1, 8, 4, false, 1, 1, 1, 28, 28),
         LayerNorm(std::vector<int>({8, 27, 27})), ReLU(), AvgPool2d(3, 2),
         Conv2d(8, 8, 5, false), LayerNorm(std::vector<int>({8, 9, 9})), ReLU(),
-        AvgPool2d(3, 2), Linear(8 * 4 * 4, 32), ReLU(), Linear(32, 11));
+        AvgPool2d(3, 2), Linear(8 * 4 * 4, 32), ReLU(), Linear(32, hrc_output_size()));
     model.to_device("cuda");
 
     float avg_error;

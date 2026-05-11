@@ -21,6 +21,11 @@ extensions = [
     "nbsphinx",
 ]
 
+myst_enable_extensions = [
+    "amsmath",
+    "dollarmath",
+]
+
 autoapi_type = "python"
 autoapi_dirs = [os.path.abspath("../pytagi")]
 autoapi_add_toctree_entry = False

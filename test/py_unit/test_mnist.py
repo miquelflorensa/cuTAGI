@@ -31,6 +31,9 @@ TEST_CPU_ONLY = os.getenv("TEST_CPU_ONLY") == "1"
 
 np.random.seed(0)
 
+NUM_CLASSES = 10
+HRC_OUTPUT_SIZE = HRCSoftmaxMetric(num_classes=NUM_CLASSES).hrc_softmax.len
+
 
 def mnist_test_runner(
     model: Sequential,
@@ -43,7 +46,7 @@ def mnist_test_runner(
         y_file="data/mnist/train-labels-idx1-ubyte",
         num_images=60000,
     )
-    metric = HRCSoftmaxMetric(num_classes=10)
+    metric = HRCSoftmaxMetric(num_classes=NUM_CLASSES)
     error_rates = []
     model.to_device("cuda" if use_cuda else "cpu")
 
@@ -90,7 +93,11 @@ class MnistTest(unittest.TestCase):
 
     def test_fnn_CPU(self):
         model = Sequential(
-            Linear(784, 32), ReLU(), Linear(32, 32), ReLU(), Linear(32, 11)
+            Linear(784, 32),
+            ReLU(),
+            Linear(32, 32),
+            ReLU(),
+            Linear(32, HRC_OUTPUT_SIZE),
         )
         avg_error_rate = mnist_test_runner(model)
         self.assertLess(
@@ -105,7 +112,7 @@ class MnistTest(unittest.TestCase):
             MixtureReLU(),
             Linear(32, 32),
             MixtureReLU(),
-            Linear(32, 11),
+            Linear(32, HRC_OUTPUT_SIZE),
         )
         avg_error_rate = mnist_test_runner(model)
         self.assertLess(
@@ -122,7 +129,7 @@ class MnistTest(unittest.TestCase):
             Linear(32, 32),
             BatchNorm2d(32),
             ReLU(),
-            Linear(32, 11),
+            Linear(32, HRC_OUTPUT_SIZE),
         )
         avg_error_rate = mnist_test_runner(model)
         self.assertLess(
@@ -139,7 +146,7 @@ class MnistTest(unittest.TestCase):
             Linear(32, 32),
             BatchNorm2d(32, bias=False),
             ReLU(),
-            Linear(32, 11),
+            Linear(32, HRC_OUTPUT_SIZE),
         )
         avg_error_rate = mnist_test_runner(model)
         self.assertLess(
@@ -156,7 +163,7 @@ class MnistTest(unittest.TestCase):
             Linear(32, 32),
             ReLU(),
             LayerNorm((32,)),
-            Linear(32, 11),
+            Linear(32, HRC_OUTPUT_SIZE),
         )
         avg_error_rate = mnist_test_runner(model)
         self.assertLess(
@@ -184,7 +191,7 @@ class MnistTest(unittest.TestCase):
             AvgPool2d(3, 2),
             Linear(8 * 4 * 4, 32),
             ReLU(),
-            Linear(32, 11),
+            Linear(32, HRC_OUTPUT_SIZE),
         )
         avg_error_rate = mnist_test_runner(model)
         self.assertLess(
@@ -212,7 +219,7 @@ class MnistTest(unittest.TestCase):
             MaxPool2d(3, 2),
             Linear(8 * 4 * 4, 32),
             ReLU(),
-            Linear(32, 11),
+            Linear(32, HRC_OUTPUT_SIZE),
         )
         avg_error_rate = mnist_test_runner(model)
         self.assertLess(
@@ -243,7 +250,7 @@ class MnistTest(unittest.TestCase):
             AvgPool2d(3, 2),
             Linear(8 * 4 * 4, 32),
             ReLU(),
-            Linear(32, 11),
+            Linear(32, HRC_OUTPUT_SIZE),
         )
         avg_error_rate = mnist_test_runner(model)
         self.assertLess(
@@ -274,7 +281,7 @@ class MnistTest(unittest.TestCase):
             AvgPool2d(3, 2),
             Linear(8 * 4 * 4, 32),
             ReLU(),
-            Linear(32, 11),
+            Linear(32, HRC_OUTPUT_SIZE),
         )
         avg_error_rate = mnist_test_runner(model)
         self.assertLess(
@@ -289,7 +296,11 @@ class MnistTest(unittest.TestCase):
         if not pytagi.cuda.is_available():
             self.skipTest("CUDA is not available")
         model = Sequential(
-            Linear(784, 32), ReLU(), Linear(32, 32), ReLU(), Linear(32, 11)
+            Linear(784, 32),
+            ReLU(),
+            Linear(32, 32),
+            ReLU(),
+            Linear(32, HRC_OUTPUT_SIZE),
         )
         avg_error_rate = mnist_test_runner(model, use_cuda=True)
         self.assertLess(
@@ -307,7 +318,7 @@ class MnistTest(unittest.TestCase):
             MixtureReLU(),
             Linear(32, 32),
             MixtureReLU(),
-            Linear(32, 11),
+            Linear(32, HRC_OUTPUT_SIZE),
         )
         avg_error_rate = mnist_test_runner(model, use_cuda=True)
         self.assertLess(
@@ -327,7 +338,7 @@ class MnistTest(unittest.TestCase):
             Linear(32, 32),
             BatchNorm2d(32),
             ReLU(),
-            Linear(32, 11),
+            Linear(32, HRC_OUTPUT_SIZE),
         )
         avg_error_rate = mnist_test_runner(model, use_cuda=True)
         self.assertLess(
@@ -347,7 +358,7 @@ class MnistTest(unittest.TestCase):
             Linear(32, 32),
             ReLU(),
             LayerNorm((32,)),
-            Linear(32, 11),
+            Linear(32, HRC_OUTPUT_SIZE),
         )
         avg_error_rate = mnist_test_runner(model, use_cuda=True)
         self.assertLess(
@@ -378,7 +389,7 @@ class MnistTest(unittest.TestCase):
             AvgPool2d(3, 2),
             Linear(8 * 4 * 4, 32),
             ReLU(),
-            Linear(32, 11),
+            Linear(32, HRC_OUTPUT_SIZE),
         )
         avg_error_rate = mnist_test_runner(model, use_cuda=True)
         self.assertLess(
@@ -409,7 +420,7 @@ class MnistTest(unittest.TestCase):
             MaxPool2d(3, 2),
             Linear(8 * 4 * 4, 32),
             ReLU(),
-            Linear(32, 11),
+            Linear(32, HRC_OUTPUT_SIZE),
         )
         avg_error_rate = mnist_test_runner(model, use_cuda=True)
         self.assertLess(

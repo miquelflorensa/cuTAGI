@@ -8,6 +8,7 @@
 #include "../../include/activation.h"
 #include "../../include/batchnorm_layer.h"
 #include "../../include/conv2d_layer.h"
+#include "../../include/cost.h"
 #include "../../include/data_struct.h"
 #include "../../include/dataloader.h"
 #include "../../include/layer_block.h"
@@ -16,6 +17,10 @@
 #include "../../include/pooling_layer.h"
 #include "../../include/resnet_block.h"
 #include "../../include/sequential.h"
+
+static int hrc_output_size(int num_classes = 10) {
+    return class_to_obs(num_classes).len;
+}
 
 LayerBlock create_basic_block(int in_channels, int out_channels, int stride = 1,
                               int padding_type = 1) {
@@ -63,7 +68,7 @@ std::shared_ptr<Sequential> create_resnet_model() {
         resnet_block_7, ReLU(), resnet_block_8, ReLU(),
 
         // Output block
-        AvgPool2d(4), Linear(64, 11));
+        AvgPool2d(4), Linear(64, hrc_output_size()));
 
     // Now return the shared pointer
     return model;
@@ -75,14 +80,14 @@ void load_dict_state() {
                        MixtureReLU(), AvgPool2d(3, 2, 1, 2),
                        Conv2d(32, 64, 5, true, 1, 2, 1), MixtureReLU(),
                        AvgPool2d(3, 2, 1, 2), Linear(64 * 4 * 4, 100),
-                       MixtureReLU(), Linear(100, 11));
+                       MixtureReLU(), Linear(100, hrc_output_size()));
 
     Sequential model_2(Conv2d(3, 32, 5, true, 1, 2, 1, 32, 32), MixtureReLU(),
                        AvgPool2d(3, 2, 1, 2), Conv2d(32, 32, 5, true, 1, 2, 1),
                        MixtureReLU(), AvgPool2d(3, 2, 1, 2),
                        Conv2d(32, 64, 5, true, 1, 2, 1), MixtureReLU(),
                        AvgPool2d(3, 2, 1, 2), Linear(64 * 4 * 4, 100),
-                       MixtureReLU(), Linear(100, 11));
+                       MixtureReLU(), Linear(100, hrc_output_size()));
 
     model_1.preinit_layer();
     model_2.preinit_layer();

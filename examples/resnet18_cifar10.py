@@ -26,6 +26,9 @@ from pytagi.nn import (
     Sequential,
 )
 
+NUM_CLASSES = 10
+HRC_OUTPUT_SIZE = HRCSoftmaxMetric(num_classes=NUM_CLASSES).hrc_softmax.len
+
 # Constants for dataset normalization
 NORMALIZATION_MEAN = (0.4914, 0.4822, 0.4465)
 NORMALIZATION_STD = (0.2023, 0.1994, 0.2010)
@@ -44,7 +47,7 @@ CNN_NET = Sequential(
     AvgPool2d(3, 2, padding=1, padding_type=2),
     Linear(64 * 4 * 4, 256),
     ReLU(),
-    Linear(256, 11),
+    Linear(256, HRC_OUTPUT_SIZE),
 )
 
 
@@ -126,7 +129,7 @@ def main(num_epochs: int = 100, batch_size: int = 128, sigma_v: float = 1):
     train_loader, test_loader = load_datasets(batch_size)
 
     # Hierachical Softmax
-    metric = HRCSoftmaxMetric(num_classes=10)
+    metric = HRCSoftmaxMetric(num_classes=NUM_CLASSES)
 
     # Resnet18
     # net = resnet18_cifar10()
@@ -157,7 +160,9 @@ def main(num_epochs: int = 100, batch_size: int = 128, sigma_v: float = 1):
             m_pred, v_pred = net(x)
 
             # Update output layers based on targets
-            y, y_idx, _ = utils.label_to_obs(labels=labels, num_classes=10)
+            y, y_idx, _ = utils.label_to_obs(
+                labels=labels, num_classes=NUM_CLASSES
+            )
             out_updater.update_using_indices(
                 output_states=net.output_z_buffer,
                 mu_obs=y,

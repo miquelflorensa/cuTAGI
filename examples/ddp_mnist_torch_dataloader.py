@@ -30,6 +30,9 @@ from pytagi.nn import (
     Sequential,
 )
 
+NUM_CLASSES = 10
+HRC_OUTPUT_SIZE = HRCSoftmaxMetric(num_classes=NUM_CLASSES).hrc_softmax.len
+
 # Define a simple CNN model
 CNN = Sequential(
     Conv2d(1, 16, 4, padding=1, in_width=28, in_height=28),
@@ -40,7 +43,7 @@ CNN = Sequential(
     AvgPool2d(3, 2),
     Linear(32 * 4 * 4, 100),
     ReLU(),
-    Linear(100, 11),
+    Linear(100, HRC_OUTPUT_SIZE),
 )
 
 CNN_BATCHNORM = Sequential(
@@ -54,7 +57,7 @@ CNN_BATCHNORM = Sequential(
     AvgPool2d(3, 2),
     Linear(32 * 4 * 4, 100),
     ReLU(),
-    Linear(100, 11),
+    Linear(100, HRC_OUTPUT_SIZE),
 )
 
 FNN = Sequential(
@@ -62,7 +65,7 @@ FNN = Sequential(
     MixtureReLU(),
     Linear(128, 128),
     MixtureReLU(),
-    Linear(128, 11),
+    Linear(128, HRC_OUTPUT_SIZE),
 )
 
 comm = MPI.COMM_WORLD
@@ -198,7 +201,7 @@ def main(
     )
 
     # Hierarchical Softmax
-    metric = HRCSoftmaxMetric(num_classes=10)
+    metric = HRCSoftmaxMetric(num_classes=NUM_CLASSES)
 
     # Create output updater
     device = "cuda:" + str(device_ids[rank])
@@ -220,7 +223,9 @@ def main(
         total_train_samples = 0
 
         for x_batch, labels in train_loader:
-            y, y_idx, _ = utils.label_to_obs(labels=labels, num_classes=10)
+            y, y_idx, _ = utils.label_to_obs(
+                labels=labels, num_classes=NUM_CLASSES
+            )
 
             # Set variance for observations
             var_y = np.full(
@@ -276,7 +281,9 @@ def main(
         local_test_samples = 0
 
         for x_batch, labels in test_loader:
-            y, y_idx, _ = utils.label_to_obs(labels=labels, num_classes=10)
+            y, y_idx, _ = utils.label_to_obs(
+                labels=labels, num_classes=NUM_CLASSES
+            )
 
             # Forward pass
             m_pred, v_pred = ddp_model(x_batch)

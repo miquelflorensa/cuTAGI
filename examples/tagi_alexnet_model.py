@@ -10,7 +10,7 @@ from pytagi.nn import (
 
 
 def create_alexnet(
-    gain_w: float = 1, gain_b: float = 1, nb_outputs: int = 1001
+    gain_w: float = 1, gain_b: float = 1, nb_outputs: int = 999
 ):
     alex_net = Sequential(
         # 224x224

@@ -16,6 +16,7 @@
 #include "../../include/base_output_updater.h"
 #include "../../include/batchnorm_layer.h"
 #include "../../include/conv2d_layer.h"
+#include "../../include/cost.h"
 #include "../../include/custom_logger.h"
 #include "../../include/data_struct.h"
 #include "../../include/dataloader.h"
@@ -38,6 +39,10 @@
 #endif
 
 extern bool g_gpu_enabled;
+
+static int hrc_output_size(int num_classes = 10) {
+    return class_to_obs(num_classes).len;
+}
 
 /**
  * Distributed ResNet test runner
@@ -78,7 +83,7 @@ void distributed_resnet_cifar10_runner(DDPSequential& dist_model,
     int height = 32;
     int channel = 3;
     int n_x = width * height * channel;
-    int n_y = 11;
+    int n_y = hrc_output_size(num_classes);
 
     // Calculate data partition for this process
     int data_per_process = num_train_data / world_size;
@@ -326,7 +331,7 @@ TEST_F(ResNetDDPTest, ResNet_NCCL) {
         resnet_block_1, resnet_block_2, resnet_block_3, resnet_block_4,
         resnet_block_5, resnet_block_6, resnet_block_7, resnet_block_8,
         // Output block
-        AvgPool2d(4), Linear(512, 11));
+        AvgPool2d(4), Linear(512, hrc_output_size()));
 
     // Configure distributed training
     std::vector<int> device_ids;

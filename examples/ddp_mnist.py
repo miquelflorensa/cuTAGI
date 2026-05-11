@@ -26,6 +26,9 @@ from pytagi.nn import (
     Sequential,
 )
 
+NUM_CLASSES = 10
+HRC_OUTPUT_SIZE = HRCSoftmaxMetric(num_classes=NUM_CLASSES).hrc_softmax.len
+
 # Define a simple CNN model
 CNN = Sequential(
     Conv2d(1, 16, 4, padding=1, in_width=28, in_height=28),
@@ -36,7 +39,7 @@ CNN = Sequential(
     AvgPool2d(3, 2),
     Linear(32 * 4 * 4, 100),
     ReLU(),
-    Linear(100, 11),
+    Linear(100, HRC_OUTPUT_SIZE),
 )
 
 CNN_BATCHNORM = Sequential(
@@ -50,7 +53,7 @@ CNN_BATCHNORM = Sequential(
     AvgPool2d(3, 2),
     Linear(32 * 4 * 4, 100),
     ReLU(),
-    Linear(100, 11),
+    Linear(100, HRC_OUTPUT_SIZE),
 )
 
 FNN = Sequential(
@@ -58,7 +61,7 @@ FNN = Sequential(
     ReLU(),
     Linear(128, 128),
     ReLU(),
-    Linear(128, 11),
+    Linear(128, HRC_OUTPUT_SIZE),
 )
 
 pytagi.manual_seed(0)
@@ -107,7 +110,7 @@ def main(num_epochs: int = 10, batch_size: int = 256, sigma_v: float = 0.1):
     )
 
     # Hierarchical Softmax
-    metric = HRCSoftmaxMetric(num_classes=10)
+    metric = HRCSoftmaxMetric(num_classes=NUM_CLASSES)
 
     # Create output updater
     device = "cuda:" + str(device_ids[rank])

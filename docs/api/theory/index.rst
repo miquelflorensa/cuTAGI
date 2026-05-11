@@ -29,6 +29,10 @@ In order to perform the Bayesian estimation for learning the parameters or laten
 
 The TAGI's theory outlined above enables achieving **linear complexity** with respect to the number of parameters in the neural network. Because the complexity is the same as gradient-backpropagation trained neural networks, TAGI has the potential to scale to the same large-scale applications.
 
+For classification output layers, pyTAGI uses a hierarchical softmax
+decomposition. The current exact-leaf normalization used for HRC Softmax is
+described in :doc:`hrc_softmax_fix`.
+
 Core Theory Papers
 -------------------
 
@@ -60,5 +64,6 @@ Video tutorials are available on:
 
    activation
    delta
+   hrc_softmax_fix
 
 .. batch

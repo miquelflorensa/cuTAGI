@@ -38,6 +38,7 @@ rank = comm.Get_rank()
 # Constants for dataset normalization
 NORMALIZATION_MEAN = [0.4914, 0.4822, 0.4465]
 NORMALIZATION_STD = [0.2470, 0.2435, 0.2616]
+NUM_CLASSES = 10
 
 
 def signal_handler(signum, frame):
@@ -202,16 +203,18 @@ def main(
         device_ids=device_ids, backend="nccl", rank=rank, world_size=world_size
     )
 
+    metric = HRCSoftmaxMetric(num_classes=NUM_CLASSES)
+
     # Create ResNet model and wrap it with DDPSequential
-    tagi_model = resnet18_cifar10(gain_w=gain_w, gain_b=gain_b)
+    tagi_model = resnet18_cifar10(
+        gain_w=gain_w, gain_b=gain_b, nb_outputs=metric.hrc_softmax.len
+    )
     ddp_model = DDPSequential(tagi_model, config, average=True)
 
     # Load datasets with distributed samplers
     train_loader, test_loader, train_sampler = load_datasets(
         batch_size, data_dir, world_size, rank, seed, num_workers
     )
-
-    metric = HRCSoftmaxMetric(num_classes=10)
 
     device = "cuda:" + str(device_ids[rank])
     out_updater = OutputUpdater(device)
@@ -247,7 +250,9 @@ def main(
         total_train_samples = 0
 
         for x_batch, labels in train_loader:
-            y, y_idx, _ = utils.label_to_obs(labels=labels, num_classes=10)
+            y, y_idx, _ = utils.label_to_obs(
+                labels=labels, num_classes=NUM_CLASSES
+            )
             m_pred, v_pred = ddp_model(x_batch)
 
             # Update output layers based on targets

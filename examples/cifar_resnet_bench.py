@@ -33,6 +33,9 @@ from pytagi.nn import (
 
 torch.manual_seed(17)
 
+NUM_CLASSES = 10
+HRC_OUTPUT_SIZE = HRCSoftmaxMetric(num_classes=NUM_CLASSES).hrc_softmax.len
+
 # Constants for dataset normalization
 NORMALIZATION_MEAN = [0.4914, 0.4822, 0.4465]
 NORMALIZATION_STD = [0.2470, 0.2435, 0.2616]
@@ -58,7 +61,7 @@ TAGI_CNN_NET = Sequential(
     MixtureReLU(),
     Linear(256, 128),
     MixtureReLU(),
-    Linear(128, 11),
+    Linear(128, HRC_OUTPUT_SIZE),
 )
 
 TAGI_FNN = Sequential(
@@ -66,7 +69,7 @@ TAGI_FNN = Sequential(
     ReLU(),
     Linear(4096, 4096),
     ReLU(),
-    Linear(4096, 11),
+    Linear(4096, HRC_OUTPUT_SIZE),
 )
 
 
@@ -233,11 +236,13 @@ def tagi_trainer(
     train_loader, test_loader = load_datasets(batch_size, "tagi")
 
     # Hierachical Softmax
-    metric = HRCSoftmaxMetric(num_classes=10)
+    metric = HRCSoftmaxMetric(num_classes=NUM_CLASSES)
 
     # Resnet18
     # net = TAGI_CNN_NET
-    net = resnet18_cifar10(gain_w=0.10, gain_b=0.10)
+    net = resnet18_cifar10(
+        gain_w=0.10, gain_b=0.10, nb_outputs=metric.hrc_softmax.len
+    )
     if pytagi.cuda.is_available() and device == "cuda":
         net.to_device(device)
     else:
@@ -275,7 +280,9 @@ def tagi_trainer(
                 print_var = False
 
             # Update output layers based on targets
-            y, y_idx, _ = utils.label_to_obs(labels=labels, num_classes=10)
+            y, y_idx, _ = utils.label_to_obs(
+                labels=labels, num_classes=NUM_CLASSES
+            )
             out_updater.update_using_indices(
                 output_states=net.output_z_buffer,
                 mu_obs=y,

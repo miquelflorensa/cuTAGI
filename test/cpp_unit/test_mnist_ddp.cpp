@@ -15,6 +15,7 @@
 #include "../../include/batchnorm_layer.h"
 #include "../../include/common.h"
 #include "../../include/conv2d_layer.h"
+#include "../../include/cost.h"
 #include "../../include/cuda_utils.h"
 #include "../../include/custom_logger.h"
 #include "../../include/data_struct.h"
@@ -36,6 +37,10 @@
 #endif
 
 extern bool g_gpu_enabled;
+
+static int hrc_output_size(int num_classes = 10) {
+    return class_to_obs(num_classes).len;
+}
 
 /**
  * Distributed MNIST test runner
@@ -80,7 +85,7 @@ void distributed_mnist_test_runner(DDPSequential &dist_model,
     int height = 28;
     int channel = 1;
     int n_x = width * height;
-    int n_y = 11;
+    int n_y = hrc_output_size(num_classes);
 
     auto train_db = get_images_v2(data_name, x_train_paths, y_train_paths, mu,
                                   sigma, num_train_data, num_classes, width,
@@ -385,7 +390,7 @@ TEST_F(MNISTDDPTest, SimpleCNN_NCCL) {
     auto model = std::make_shared<Sequential>(
         Conv2d(1, 16, 4, true, 1, 1, 1, 28, 28), ReLU(), MaxPool2d(3, 2),
         Conv2d(16, 32, 5), ReLU(), MaxPool2d(3, 2), Linear(32 * 4 * 4, 128),
-        ReLU(), Linear(128, 11));
+        ReLU(), Linear(128, hrc_output_size()));
 
     // Configure distributed training
     std::vector<int> device_ids;

@@ -171,8 +171,12 @@ def main(
         device_ids=device_ids, backend="nccl", rank=rank, world_size=world_size
     )
 
+    metric = HRCSoftmaxMetric(num_classes=nb_classes)
+
     tagi_model = create_alexnet(
-        gain_w=gain_w, gain_b=gain_b, nb_outputs=nb_classes
+        gain_w=gain_w,
+        gain_b=gain_b,
+        nb_outputs=metric.hrc_softmax.len,
     )
     ddp_model = DDPSequential(tagi_model, config, average=True)
 
@@ -180,7 +184,6 @@ def main(
         batch_size, data_dir, world_size, rank, seed, num_workers, nb_classes
     )
 
-    metric = HRCSoftmaxMetric(num_classes=nb_classes)
     device = ddp_model.get_device_with_index()
     out_updater = OutputUpdater(device)
 

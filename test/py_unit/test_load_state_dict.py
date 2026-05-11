@@ -10,7 +10,11 @@ sys.path.append(
 
 import unittest
 
+from pytagi import HRCSoftmaxMetric
 from pytagi.nn import AvgPool2d, BatchNorm2d, Conv2d, Linear, ReLU, Sequential
+
+NUM_CLASSES = 10
+HRC_OUTPUT_SIZE = HRCSoftmaxMetric(num_classes=NUM_CLASSES).hrc_softmax.len
 
 # Define models for testing
 MODEL_1 = Sequential(
@@ -27,7 +31,7 @@ MODEL_1 = Sequential(
     AvgPool2d(3, 2, padding=1, padding_type=2),
     Linear(64 * 4 * 4, 256),
     ReLU(),
-    Linear(256, 11),
+    Linear(256, HRC_OUTPUT_SIZE),
 )
 
 MODEL_2 = Sequential(
@@ -44,7 +48,7 @@ MODEL_2 = Sequential(
     AvgPool2d(3, 2, padding=1, padding_type=2),
     Linear(64 * 4 * 4, 256),
     ReLU(),
-    Linear(256, 11),
+    Linear(256, HRC_OUTPUT_SIZE),
 )
 
 

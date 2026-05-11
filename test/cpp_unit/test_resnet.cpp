@@ -4,6 +4,7 @@
 #include "../../include/base_output_updater.h"
 #include "../../include/batchnorm_layer.h"
 #include "../../include/conv2d_layer.h"
+#include "../../include/cost.h"
 #include "../../include/cuda_utils.h"
 #include "../../include/data_struct.h"
 #include "../../include/dataloader.h"
@@ -16,6 +17,10 @@
 #include "test_utils.h"
 
 extern bool g_gpu_enabled;
+
+static int hrc_output_size(int num_classes = 10) {
+    return class_to_obs(num_classes).len;
+}
 
 // Function to convert normalized RGB to grayscale
 float rgb_to_gray(float red, float green, float blue) {
@@ -72,7 +77,7 @@ void resnet_cifar10_runner(Sequential& model, float& avg_error_output)
     int height = 32;
     int channel = 3;
     int n_x = width * height * channel;
-    int n_y = 11;
+    int n_y = hrc_output_size(num_classes);
     auto train_db = get_images_v2(data_name, x_train_paths, y_train_paths, mu,
                                   sigma, num_train_data, num_classes, width,
                                   height, channel, true);
@@ -260,7 +265,7 @@ TEST_F(ResnetTest, TestResnetCifar10) {
         resnet_block_5, resnet_block_6, resnet_block_7, resnet_block_8,
 
         // Output block
-        AvgPool2d(4), Linear(512, 11));
+        AvgPool2d(4), Linear(512, hrc_output_size()));
 
     model.to_device("cuda");
 

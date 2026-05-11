@@ -27,12 +27,15 @@ from pytagi.nn import (
     Sequential,
 )
 
+NUM_CLASSES = 10
+HRC_OUTPUT_SIZE = HRCSoftmaxMetric(num_classes=NUM_CLASSES).hrc_softmax.len
+
 FNN = Sequential(
     Linear(784, 128),
     MixtureReLU(),
     Linear(128, 128),
     MixtureReLU(),
-    Linear(128, 11),
+    Linear(128, HRC_OUTPUT_SIZE),
 )
 
 FNN_BATCHNORM = Sequential(
@@ -42,7 +45,7 @@ FNN_BATCHNORM = Sequential(
     Linear(100, 100),
     MixtureReLU(),
     BatchNorm2d(100),
-    Linear(100, 11),
+    Linear(100, HRC_OUTPUT_SIZE),
 )
 
 FNN_LAYERNORM = Sequential(
@@ -52,7 +55,7 @@ FNN_LAYERNORM = Sequential(
     Linear(100, 100, bias=False),
     MixtureReLU(),
     LayerNorm((100,)),
-    Linear(100, 11),
+    Linear(100, HRC_OUTPUT_SIZE),
 )
 
 CNN = Sequential(
@@ -64,7 +67,7 @@ CNN = Sequential(
     AvgPool2d(3, 2),
     Linear(32 * 4 * 4, 100),
     ReLU(),
-    Linear(100, 11),
+    Linear(100, HRC_OUTPUT_SIZE),
 )
 
 CNN_BATCHNORM = Sequential(
@@ -78,7 +81,7 @@ CNN_BATCHNORM = Sequential(
     AvgPool2d(3, 2),
     Linear(32 * 4 * 4, 100),
     ReLU(),
-    Linear(100, 11),
+    Linear(100, HRC_OUTPUT_SIZE),
 )
 
 CNN_LAYERNORM = Sequential(
@@ -92,7 +95,7 @@ CNN_LAYERNORM = Sequential(
     AvgPool2d(3, 2),
     Linear(32 * 4 * 4, 100),
     MixtureReLU(),
-    Linear(100, 11),
+    Linear(100, HRC_OUTPUT_SIZE),
 )
 
 
@@ -123,7 +126,7 @@ def main(
             config={
                 "sigma_v": sigma_v,
                 "dataset": "mnist",
-                "nb_classes": 10,
+                "nb_classes": NUM_CLASSES,
                 "batch_size": batch_size,
                 "num_epochs": num_epochs,
             },
@@ -142,7 +145,7 @@ def main(
         num_images=10000,
     )
     # Hierachical Softmax
-    metric = HRCSoftmaxMetric(num_classes=10)
+    metric = HRCSoftmaxMetric(num_classes=NUM_CLASSES)
 
     # Network configuration
     net = CNN

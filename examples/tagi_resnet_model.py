@@ -53,7 +53,10 @@ def make_layer_block(
 
 
 def resnet18_cifar10(
-    gain_w: float = 1, gain_b: float = 1, is_remax: bool = False
+    gain_w: float = 1,
+    gain_b: float = 1,
+    is_remax: bool = False,
+    nb_outputs: int | None = None,
 ) -> Sequential:
     """Resnet18 architecture for cifar10"""
     # 32x32
@@ -129,22 +132,24 @@ def resnet18_cifar10(
         ResNetBlock(make_layer_block(512, 512, gain_weight=gain_w)),
     ]
     if is_remax:
+        nb_outputs = 10 if nb_outputs is None else nb_outputs
         final_layers = [
             AvgPool2d(4),
-            Linear(512, 10, gain_weight=gain_w, gain_bias=gain_b),
+            Linear(512, nb_outputs, gain_weight=gain_w, gain_bias=gain_b),
             Remax(),
         ]
     else:
+        nb_outputs = 9 if nb_outputs is None else nb_outputs
         final_layers = [
             AvgPool2d(4),
-            Linear(512, 11, gain_weight=gain_w, gain_bias=gain_b),
+            Linear(512, nb_outputs, gain_weight=gain_w, gain_bias=gain_b),
         ]
 
     return Sequential(*initial_layers, *resnet_layers, *final_layers)
 
 
 def resnet18_imagenet(
-    gain_w: float = 1, gain_b: float = 1, nb_outputs=1001
+    gain_w: float = 1, gain_b: float = 1, nb_outputs=999
 ) -> Sequential:
     """Resnet18 architecture for imagenet"""
     # 224x224

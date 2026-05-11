@@ -18,12 +18,15 @@ from pytagi.nn import (
     Sequential,
 )
 
+NUM_CLASSES = 10
+HRC_OUTPUT_SIZE = HRCSoftmaxMetric(num_classes=NUM_CLASSES).hrc_softmax.len
+
 TAGI_FNN = Sequential(
     Linear(784, 4096),
     ReLU(),
     Linear(4096, 4096),
     ReLU(),
-    Linear(4096, 11),
+    Linear(4096, HRC_OUTPUT_SIZE),
 )
 
 TAGI_CNN = Sequential(
@@ -35,7 +38,7 @@ TAGI_CNN = Sequential(
     AvgPool2d(3, 2),
     Linear(32 * 4 * 4, 256),
     ReLU(),
-    Linear(256, 11),
+    Linear(256, HRC_OUTPUT_SIZE),
 )
 
 TAGI_CNN_BATCHNORM = Sequential(
@@ -49,7 +52,7 @@ TAGI_CNN_BATCHNORM = Sequential(
     AvgPool2d(3, 2),
     Linear(64 * 4 * 4, 256),
     ReLU(),
-    Linear(256, 11),
+    Linear(256, HRC_OUTPUT_SIZE),
 )
 
 
@@ -178,7 +181,7 @@ def tagi_trainer(
     utils = Utils()
 
     # Hierachical Softmax
-    metric = HRCSoftmaxMetric(num_classes=10)
+    metric = HRCSoftmaxMetric(num_classes=NUM_CLASSES)
     net = TAGI_FNN
     net.to_device(device)
     # net.set_threads(16)
@@ -206,7 +209,9 @@ def tagi_trainer(
             m_pred, v_pred = net(x)
 
             # Update output layers based on targets
-            y, y_idx, _ = utils.label_to_obs(labels=labels, num_classes=10)
+            y, y_idx, _ = utils.label_to_obs(
+                labels=labels, num_classes=NUM_CLASSES
+            )
             out_updater.update_using_indices(
                 output_states=net.output_z_buffer,
                 mu_obs=y,
