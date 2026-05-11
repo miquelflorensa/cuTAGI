@@ -1,12 +1,69 @@
 #include "../include/cost.h"
 
+#include <cmath>
+
+#include "../include/common.h"
 #include "../include/custom_logger.h"
 
 namespace {
 
+// Gate activation slope inside obs_to_class. Keep in sync with the alpha used
+// there: P_z = normcdf(mz / sqrt((1/alpha)^2 + Sz)).
+constexpr float kHrcGateAlpha = 3.0f;
+
+// Inverse standard-normal CDF (probit) via Acklam's rational approximation.
+// Accurate to ~1e-9 over (0, 1). We only call it during tree construction.
+float inverse_normcdf(float p) {
+    static const double a[] = {-3.969683028665376e+01, 2.209460984245205e+02,
+                               -2.759285104469687e+02, 1.383577518672690e+02,
+                               -3.066479806614716e+01, 2.506628277459239e+00};
+    static const double b[] = {-5.447609879822406e+01, 1.615858368580409e+02,
+                               -1.556989798598866e+02, 6.680131188771972e+01,
+                               -1.328068155288572e+01};
+    static const double c[] = {-7.784894002430293e-03, -3.223964580411365e-01,
+                               -2.400758277161838e+00, -2.549732539343734e+00,
+                               4.374664141464968e+00,  2.938163982698783e+00};
+    static const double d[] = {7.784695709041462e-03, 3.224671290700398e-01,
+                               2.445134137142996e+00, 3.754408661907416e+00};
+    const double p_low = 0.02425;
+    const double p_high = 1.0 - p_low;
+    double q, r, x;
+
+    if (p < p_low) {
+        q = std::sqrt(-2.0 * std::log(p));
+        x = (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q +
+             c[5]) /
+            ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1.0);
+    } else if (p <= p_high) {
+        q = p - 0.5;
+        r = q * q;
+        x = (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r +
+             a[5]) *
+            q /
+            (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r +
+             1.0);
+    } else {
+        q = std::sqrt(-2.0 * std::log(1.0 - p));
+        x = -(((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q +
+              c[5]) /
+            ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1.0);
+    }
+    return static_cast<float>(x);
+}
+
+// Bias that makes p_left = L/N at zero gate logit and zero gate variance.
+float gate_prior_bias(int left_size, int span) {
+    if (span <= 1 || left_size == span - left_size) {
+        return 0.0f;
+    }
+    const float ratio = static_cast<float>(left_size) / static_cast<float>(span);
+    return inverse_normcdf(ratio) / kHrcGateAlpha;
+}
+
 void assign_hrc_paths(int start_class, int end_class, int node_idx,
                       int &next_node_idx, std::vector<std::vector<float>> &obs,
-                      std::vector<std::vector<int>> &idx) {
+                      std::vector<std::vector<int>> &idx,
+                      std::vector<float> &bias) {
     const int num_classes = end_class - start_class;
     if (num_classes <= 1) {
         return;
@@ -14,6 +71,8 @@ void assign_hrc_paths(int start_class, int end_class, int node_idx,
 
     const int left_size = (num_classes + 1) / 2;
     const int split_class = start_class + left_size;
+
+    bias[node_idx - 1] = gate_prior_bias(left_size, num_classes);
 
     for (int label = start_class; label < split_class; label++) {
         obs[label].push_back(1.0f);
@@ -28,14 +87,14 @@ void assign_hrc_paths(int start_class, int end_class, int node_idx,
         const int child_node_idx = next_node_idx;
         next_node_idx++;
         assign_hrc_paths(start_class, split_class, child_node_idx,
-                         next_node_idx, obs, idx);
+                         next_node_idx, obs, idx, bias);
     }
     const int right_size = end_class - split_class;
     if (right_size > 1) {
         const int child_node_idx = next_node_idx;
         next_node_idx++;
         assign_hrc_paths(split_class, end_class, child_node_idx, next_node_idx,
-                         obs, idx);
+                         obs, idx, bias);
     }
 }
 
@@ -112,7 +171,7 @@ int bi_to_dec(std::vector<int> &v, int base)
     return num;
 }
 
-HRCSoftmax class_to_obs(int n_classes)
+HRCSoftmax class_to_obs(int n_classes, bool use_prior_bias)
 /*
  * Convert class to hierarchical softmax for classification task.
  *
@@ -120,26 +179,37 @@ HRCSoftmax class_to_obs(int n_classes)
  * nodes. Class paths can have different lengths, so obs/idx are padded to the
  * maximum path length with idx = 0. Updaters skip padded entries.
  *
+ * When use_prior_bias is true (default), each gate carries a fixed prior bias
+ * chosen so that with zero gate logits the per-class prior probability equals
+ * 1/n_classes. When false, the bias vector is left empty and the forward and
+ * backward paths fall back to the previous behavior (no prior shift).
+ *
  * Args:
  *    n_classes: Number of classes.
+ *    use_prior_bias: Whether to populate the per-gate uniform-prior bias.
  *
  * Returns:
  *    obs: Observation matrix for each class i.e. -1 and 1
  *    idx: Indices for each observation
  *    path_len: Number of real observations for each class
+ *    bias: Prior offset per gate (length n_classes - 1, or empty if disabled)
  *    n_obs: Maximum number of observations
  *    len: Number of internal decision nodes
  **/
 {
     if (n_classes < 2) {
-        return {{}, {}, {}, 0, 0};
+        return {{}, {}, {}, {}, 0, 0};
     }
 
     std::vector<std::vector<float>> obs_by_class(n_classes);
     std::vector<std::vector<int>> idx_by_class(n_classes);
+    std::vector<float> bias(n_classes - 1, 0.0f);
     int next_node_idx = 2;
     assign_hrc_paths(0, n_classes, 1, next_node_idx, obs_by_class,
-                     idx_by_class);
+                     idx_by_class, bias);
+    if (!use_prior_bias) {
+        bias.clear();
+    }
 
     int max_path_len = 0;
     std::vector<int> path_len(n_classes, 0);
@@ -157,7 +227,7 @@ HRCSoftmax class_to_obs(int n_classes)
         }
     }
 
-    return {obs, idx, path_len, max_path_len, n_classes - 1};
+    return {obs, idx, path_len, bias, max_path_len, n_classes - 1};
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -187,11 +257,14 @@ std::vector<float> obs_to_class(std::vector<float> &mz, std::vector<float> &Sz,
     // Initialization
     std::vector<float> P(n_classes);
     std::vector<float> P_z(hs.len);
-    float alpha = 3;
+    float alpha = kHrcGateAlpha;
+    const bool has_bias = static_cast<int>(hs.bias.size()) == hs.len;
 
     // Compute probability for each observation
     for (int i = 0; i < hs.len; i++) {
-        P_z[i] = normcdf_cpu(mz[i] / pow(pow(1 / alpha, 2) + Sz[i], 0.5));
+        const float bias_i = has_bias ? hs.bias[i] : 0.0f;
+        P_z[i] = normcdf_cpu((mz[i] + bias_i) /
+                             pow(pow(1 / alpha, 2) + Sz[i], 0.5));
     }
 
     // Compute probability for the class

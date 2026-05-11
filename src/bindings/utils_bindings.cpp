@@ -3,10 +3,11 @@
 Utils::Utils() {};
 Utils::~Utils() {};
 std::tuple<std::vector<float>, std::vector<int>, int>
-Utils::label_to_obs_wrapper(std::vector<int> &labels, int num_classes) {
+Utils::label_to_obs_wrapper(std::vector<int> &labels, int num_classes,
+                            bool use_prior_bias) {
     // Create tree
     int num = labels.size();
-    auto hrs = class_to_obs(num_classes);
+    auto hrs = class_to_obs(num_classes, use_prior_bias);
 
     // Convert to observation and get observation indices
     std::vector<float> obs(hrs.n_obs * num);
@@ -81,8 +82,9 @@ Utils::get_labels_wrapper(std::vector<float> &mz, std::vector<float> &Sz,
     return {py_pred, py_prob};
 }
 
-HRCSoftmax Utils::hierarchical_softmax_wrapper(int num_classes) {
-    auto hs = class_to_obs(num_classes);
+HRCSoftmax Utils::hierarchical_softmax_wrapper(int num_classes,
+                                               bool use_prior_bias) {
+    auto hs = class_to_obs(num_classes, use_prior_bias);
 
     return hs;
 }
@@ -143,10 +145,14 @@ std::vector<float> Utils::get_upper_triu_cov_wrapper(int batch_size,
 void bind_utils(pybind11::module_ &m) {
     pybind11::class_<Utils>(m, "Utils")
         .def(pybind11::init<>())
-        .def("label_to_obs_wrapper", &Utils::label_to_obs_wrapper)
+        .def("label_to_obs_wrapper", &Utils::label_to_obs_wrapper,
+             pybind11::arg("labels"), pybind11::arg("num_classes"),
+             pybind11::arg("use_prior_bias") = true)
         .def("label_to_one_hot_wrapper", &Utils::label_to_one_hot_wrapper)
         .def("hierarchical_softmax_wrapper",
-             &Utils::hierarchical_softmax_wrapper)
+             &Utils::hierarchical_softmax_wrapper,
+             pybind11::arg("num_classes"),
+             pybind11::arg("use_prior_bias") = true)
         .def("load_mnist_dataset_wrapper", &Utils::load_mnist_dataset_wrapper,
              pybind11::arg("image_file"), pybind11::arg("label_file"),
              pybind11::arg("num"))

@@ -18,7 +18,8 @@ class Utils {
     ~Utils();
     std::string get_name() { return "Utils"; }
     std::tuple<std::vector<float>, std::vector<int>, int> label_to_obs_wrapper(
-        std::vector<int> &labels, int num_classes);
+        std::vector<int> &labels, int num_classes,
+        bool use_prior_bias = true);
 
     pybind11::array_t<float> label_to_one_hot_wrapper(std::vector<int> &labels,
                                                       int n_classes);
@@ -34,7 +35,8 @@ class Utils {
     get_labels_wrapper(std::vector<float> &mz, std::vector<float> &Sz,
                        HRCSoftmax &hs, int num_classes, int B);
 
-    HRCSoftmax hierarchical_softmax_wrapper(int num_classes);
+    HRCSoftmax hierarchical_softmax_wrapper(int num_classes,
+                                            bool use_prior_bias = true);
 
     std::vector<float> obs_to_label_prob_wrapper(std::vector<float> &mz,
                                                  std::vector<float> &Sz,

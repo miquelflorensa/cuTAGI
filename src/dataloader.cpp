@@ -188,13 +188,22 @@ void labels_to_hrs(std::vector<int> &labels, HRCSoftmax &hrs,
                    std::vector<float> &obs, std::vector<int> &obs_idx)
 /*
  * Convert labels to hierarchical softmax.
+ *
+ * The per-gate prior bias (if present in hrs) is subtracted from the fictive
+ * observation so the residual (obs - mu_a) consumed by the output updater
+ * accounts for the bias added to the gate logit during the forward pass.
  * */
 {
+    const bool has_bias = static_cast<int>(hrs.bias.size()) == hrs.len;
     for (int i = 0; i < labels.size(); i++) {
         int label = labels[i];
         for (int j = 0; j < hrs.n_obs; j++) {
-            obs[i * hrs.n_obs + j] = hrs.obs[label * hrs.n_obs + j];
-            obs_idx[i * hrs.n_obs + j] = hrs.idx[label * hrs.n_obs + j];
+            const int flat = label * hrs.n_obs + j;
+            const int gate_idx = hrs.idx[flat];
+            const float bias_val =
+                (has_bias && gate_idx > 0) ? hrs.bias[gate_idx - 1] : 0.0f;
+            obs[i * hrs.n_obs + j] = hrs.obs[flat] - bias_val;
+            obs_idx[i * hrs.n_obs + j] = gate_idx;
         }
     }
 }

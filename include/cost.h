@@ -12,7 +12,7 @@
 #include "common.h"
 #include "data_struct.h"
 
-HRCSoftmax class_to_obs(int n_classes);
+HRCSoftmax class_to_obs(int n_classes, bool use_prior_bias = true);
 std::vector<float> obs_to_class(std::vector<float> &mz, std::vector<float> &Sz,
                                 HRCSoftmax &hs, int n_classes);
 

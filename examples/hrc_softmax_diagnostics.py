@@ -14,22 +14,91 @@ from dataclasses import dataclass
 
 import numpy as np
 
+HRC_GATE_ALPHA = 3.0
+
+
+def _inverse_normcdf(p: float) -> float:
+    """Acklam's rational approximation of the standard-normal inverse CDF.
+
+    Accurate to ~1e-9 over (0, 1). Mirrors src/cost.cpp::inverse_normcdf.
+    """
+    a = (
+        -3.969683028665376e01,
+        2.209460984245205e02,
+        -2.759285104469687e02,
+        1.383577518672690e02,
+        -3.066479806614716e01,
+        2.506628277459239e00,
+    )
+    b = (
+        -5.447609879822406e01,
+        1.615858368580409e02,
+        -1.556989798598866e02,
+        6.680131188771972e01,
+        -1.328068155288572e01,
+    )
+    c = (
+        -7.784894002430293e-03,
+        -3.223964580411365e-01,
+        -2.400758277161838e00,
+        -2.549732539343734e00,
+        4.374664141464968e00,
+        2.938163982698783e00,
+    )
+    d = (
+        7.784695709041462e-03,
+        3.224671290700398e-01,
+        2.445134137142996e00,
+        3.754408661907416e00,
+    )
+    p_low = 0.02425
+    p_high = 1.0 - p_low
+
+    if p < p_low:
+        q = math.sqrt(-2.0 * math.log(p))
+        return (((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) / (
+            (((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1.0
+        )
+    if p <= p_high:
+        q = p - 0.5
+        r = q * q
+        return (((((a[0]*r+a[1])*r+a[2])*r+a[3])*r+a[4])*r+a[5]) * q / (
+            ((((b[0]*r+b[1])*r+b[2])*r+b[3])*r+b[4])*r+1.0
+        )
+    q = math.sqrt(-2.0 * math.log(1.0 - p))
+    return -(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) / (
+        (((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1.0
+    )
+
 
 @dataclass(frozen=True)
 class HRCSoftmaxMirror:
     obs: np.ndarray
     idx: np.ndarray
     path_len: np.ndarray
+    bias: np.ndarray
     num_obs: int
     length: int
 
 
-def class_to_obs(num_classes: int) -> HRCSoftmaxMirror:
+def _gate_prior_bias(left_size: int, span: int) -> float:
+    """Bias that makes p_left = left_size / span at zero gate logit."""
+    right_size = span - left_size
+    if span <= 1 or left_size == right_size:
+        return 0.0
+    ratio = left_size / span
+    return _inverse_normcdf(ratio) / HRC_GATE_ALPHA
+
+
+def class_to_obs(
+    num_classes: int, use_prior_bias: bool = True
+) -> HRCSoftmaxMirror:
     if num_classes < 2:
         raise ValueError("num_classes must be >= 2")
 
     obs_by_class: list[list[float]] = [[] for _ in range(num_classes)]
     idx_by_class: list[list[int]] = [[] for _ in range(num_classes)]
+    bias = np.zeros(num_classes - 1, dtype=np.float32)
     next_node_idx = 2
 
     def assign_paths(start_class: int, end_class: int, node_idx: int) -> None:
@@ -40,6 +109,9 @@ def class_to_obs(num_classes: int) -> HRCSoftmaxMirror:
 
         left_size = (span + 1) // 2
         split_class = start_class + left_size
+
+        if use_prior_bias:
+            bias[node_idx - 1] = _gate_prior_bias(left_size, span)
 
         for label in range(start_class, split_class):
             obs_by_class[label].append(1.0)
@@ -73,6 +145,7 @@ def class_to_obs(num_classes: int) -> HRCSoftmaxMirror:
         obs=obs.reshape(-1),
         idx=idx.reshape(-1),
         path_len=path_len,
+        bias=bias if use_prior_bias else np.zeros(0, dtype=np.float32),
         num_obs=num_obs,
         length=num_classes - 1,
     )
@@ -90,10 +163,15 @@ def obs_to_class(
     sz: np.ndarray,
     hrc: HRCSoftmaxMirror,
     num_classes: int,
-    alpha: float = 3.0,
+    alpha: float = HRC_GATE_ALPHA,
 ) -> np.ndarray:
     denom = np.sqrt((1.0 / alpha) ** 2 + sz[: hrc.length])
-    p_z = normcdf(mz[: hrc.length] / denom)
+    bias = (
+        hrc.bias
+        if hrc.bias is not None and hrc.bias.size == hrc.length
+        else np.zeros(hrc.length, dtype=np.float32)
+    )
+    p_z = normcdf((mz[: hrc.length] + bias) / denom)
     probs = np.zeros(num_classes, dtype=np.float32)
 
     for row in range(num_classes):
@@ -124,8 +202,9 @@ def summarize_case(
     seed: int,
     mean_scale: float,
     var_scale: float,
+    use_prior_bias: bool = True,
 ) -> dict[str, float]:
-    hrc = class_to_obs(num_classes)
+    hrc = class_to_obs(num_classes, use_prior_bias=use_prior_bias)
     rng = np.random.default_rng(seed)
 
     zero_mz = np.zeros(hrc.length, dtype=np.float32)
@@ -224,7 +303,13 @@ def main() -> None:
     parser.add_argument("--mz-file")
     parser.add_argument("--sz-file")
     parser.add_argument("--compare-cutagi", action="store_true")
+    parser.add_argument(
+        "--no-prior-bias",
+        action="store_true",
+        help="Disable the per-gate uniform-prior bias.",
+    )
     args = parser.parse_args()
+    use_prior_bias = not args.no_prior_bias
 
     header = (
         "classes obs len zero_sum min_sum mean_sum max_sum max_abs_sum_error"
@@ -237,6 +322,7 @@ def main() -> None:
             seed=args.seed,
             mean_scale=args.mean_scale,
             var_scale=args.var_scale,
+            use_prior_bias=use_prior_bias,
         )
         print(
             f"{int(stats['num_classes']):7d} "

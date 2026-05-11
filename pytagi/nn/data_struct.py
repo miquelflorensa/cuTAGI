@@ -259,6 +259,18 @@ class HRCSoftmax:
         self._cpp_backend.path_len = value
 
     @property
+    def bias(self) -> List[float]:
+        """
+        Gets or sets the per-gate prior bias (length = len). Indexed by
+        ``gate_index - 1`` to match ``idx`` (which is 1-indexed).
+        """
+        return self._cpp_backend.bias
+
+    @bias.setter
+    def bias(self, value: List[float]):
+        self._cpp_backend.bias = value
+
+    @property
     def num_obs(self) -> int:
         """
         Gets or sets the maximum number of indices for each label.

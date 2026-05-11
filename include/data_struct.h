@@ -269,11 +269,15 @@ struct HRCSoftmax {
         obs: A fictive observation \in [-1, 1]
         idx: Indices assigned to each label
         path_len: Number of real indices for each label
+        bias: Per-gate prior offset (size len) chosen so that with zero gate
+              logits each class has prior probability 1/n_classes. Indexed by
+              (gate_index - 1) to match idx, which is 1-indexed.
         n_obs: Maximum number of indices for each label
         len: Number of internal binary-decision nodes
     */
     std::vector<float> obs;
     std::vector<int> idx;
     std::vector<int> path_len;
+    std::vector<float> bias;
     int n_obs, len;
 };

@@ -11,16 +11,20 @@ class HRCSoftmaxMetric:
     for a classification model that uses Hierarchical Softmax.
     """
 
-    def __init__(self, num_classes: int):
+    def __init__(self, num_classes: int, use_prior_bias: bool = True):
         """Initializes the HRCSoftmaxMetric.
 
         :param num_classes: The total number of classes in the classification problem.
         :type num_classes: int
+        :param use_prior_bias: If True (default), each gate carries a fixed
+            prior bias so that with zero gate logits every class has prior
+            probability ``1 / num_classes``. Set to False to disable.
+        :type use_prior_bias: bool
         """
         self.num_classes = num_classes
         self.utils = Utils()
         self.hrc_softmax: HRCSoftmax = self.utils.get_hierarchical_softmax(
-            num_classes=num_classes
+            num_classes=num_classes, use_prior_bias=use_prior_bias
         )
 
     def error_rate(

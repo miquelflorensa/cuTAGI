@@ -22,7 +22,10 @@ class Utils:
         self._cpp_backend = cutagi.Utils()
 
     def label_to_obs(
-        self, labels: np.ndarray, num_classes: int
+        self,
+        labels: np.ndarray,
+        num_classes: int,
+        use_prior_bias: bool = True,
     ) -> Tuple[np.ndarray, np.ndarray, int]:
         """Converts class labels into observations for a binary tree structure.
 
@@ -34,6 +37,10 @@ class Utils:
         :type labels: numpy.ndarray
         :param num_classes: The total number of unique classes.
         :type num_classes: int
+        :param use_prior_bias: If True (default), subtract the per-gate prior
+            bias from the fictive observations so targets match the biased HRC
+            forward path. Set to False to recover the unshifted observations.
+        :type use_prior_bias: bool
         :return: A tuple containing:
             - **obs** (*numpy.ndarray*): Encoded observations corresponding to the labels.
             - **obs_idx** (*numpy.ndarray*): Indices of the encoded observations.
@@ -42,7 +49,7 @@ class Utils:
         """
 
         obs, obs_idx, num_obs = self._cpp_backend.label_to_obs_wrapper(
-            labels, num_classes
+            labels, num_classes, use_prior_bias
         )
 
         return np.array(obs), np.array(obs_idx), int(num_obs)
@@ -175,15 +182,24 @@ class Utils:
 
         return pred, prob
 
-    def get_hierarchical_softmax(self, num_classes: int) -> HRCSoftmax:
+    def get_hierarchical_softmax(
+        self, num_classes: int, use_prior_bias: bool = True
+    ) -> HRCSoftmax:
         """Constructs a hierarchical softmax structure (binary tree) for classification.
 
         :param num_classes: The total number of classes to be included in the tree.
         :type num_classes: int
+        :param use_prior_bias: If True (default), each gate carries a fixed
+            prior bias so that with zero gate logits every class has prior
+            probability ``1 / num_classes``. Set to False to disable the prior
+            shift (gates default to 50/50, recovering the pre-fix behavior).
+        :type use_prior_bias: bool
         :return: An object representing the hierarchical softmax structure.
         :rtype: pytagi.nn.HRCSoftmax
         """
-        hr_softmax = self._cpp_backend.hierarchical_softmax_wrapper(num_classes)
+        hr_softmax = self._cpp_backend.hierarchical_softmax_wrapper(
+            num_classes, use_prior_bias
+        )
 
         return hr_softmax
 
