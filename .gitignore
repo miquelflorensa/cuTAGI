@@ -29,6 +29,8 @@ ckpt/
 test_model/
 wandb/
 saved_results/param_viz
+saved_results/**/*.bin
+saved_results/**/*.npz
 
 # VSCode
 .vscode
